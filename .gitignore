@@ -50,11 +50,13 @@ app/.cxx/
 
 # Precompiled native libraries (build locally via CMake / build-apk.sh)
 app/src/main/jniLibs/
+engine/src/main/jniLibs/
 
 # Model files & weights
 *.gguf
 *.bin
 app/src/main/cpp/llama.cpp/models/
+engine/src/main/cpp/llama.cpp/models/
 
 
 # OS specific

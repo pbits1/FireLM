@@ -50,7 +50,7 @@
         </activity>
 
         <service
-            android:name=".download.ModelDownloadService"
+            android:name="com.lfmlocal.core.download.ModelDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

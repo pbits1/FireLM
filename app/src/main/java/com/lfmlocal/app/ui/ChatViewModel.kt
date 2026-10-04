@@ -1,44 +1,33 @@
 package com.lfmlocal.app.ui
 
-import android.Manifest
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.lfmlocal.app.data.AppPreferences
-import com.lfmlocal.app.data.ChatHistoryStorage
-import com.lfmlocal.app.data.LfmModel
-import com.lfmlocal.app.data.ModelCatalog
-import com.lfmlocal.app.download.ModelDownloadService
-import com.lfmlocal.app.download.ModelDownloader
 import com.lfmlocal.app.inference.LlamaBridge
+import com.lfmlocal.core.download.ModelDownloadService
+import com.lfmlocal.core.download.ModelDownloader
+import com.lfmlocal.core.model.ChatMsg
+import com.lfmlocal.core.model.LfmModel
+import com.lfmlocal.core.model.ModelCatalog
+import com.lfmlocal.core.storage.AppPreferences
+import com.lfmlocal.core.storage.ChatHistoryStorage
+import com.lfmlocal.core.storage.GgufScanner
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-data class ChatMsg(
-    val id: String = java.util.UUID.randomUUID().toString(),
-    val role: String,
-    val text: String,
-    val timestamp: Long = System.currentTimeMillis(),
-    val speedStats: String? = null
-)
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -46,12 +35,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         fun calculateInferenceThreads(): Int {
             val cores = Runtime.getRuntime().availableProcessors()
             return when {
-                cores >= 8 -> 4 // 2x big cores + 2x LITTLE for throughput on modern 8-core SoCs
+                cores >= 8 -> 4
                 cores >= 4 -> 3
                 else -> maxOf(1, cores)
             }
         }
     }
+
+    private val scanManager = ModelScanManager(application)
+    private val inferenceCoordinator = InferenceCoordinator()
 
     var messages by mutableStateOf(listOf<ChatMsg>())
         private set
@@ -83,21 +75,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var isSyncingModels by mutableStateOf(false)
         private set
-    private var activePfd: ParcelFileDescriptor? = null
 
-    fun checkStoragePermission(): Boolean {
-        val ctx = getApplication<Application>()
-        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            ContextCompat.checkSelfPermission(
-                ctx,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        }
-        hasStoragePermission = granted
-        return granted
-    }
+    private var activePfd: ParcelFileDescriptor? = null
+    private var directDownloadJob: Job? = null
+    private var vmWakeLock: PowerManager.WakeLock? = null
+    private var genJob: Job? = null
 
     // Hardware & Inference tuning (Persisted)
     var computeBackend by mutableStateOf(AppPreferences.getComputeBackend(application, "GPU"))
@@ -111,7 +93,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var sustainedPerformanceMode by mutableStateOf(AppPreferences.getSustainedPerformance(application, true))
         private set
 
-    // LM Studio System Prompt Deck (Direct user instructions; optional for SLMs)
+    // LM Studio System Prompt Deck
     var systemPromptEnabled by mutableStateOf(AppPreferences.isSystemPromptEnabled(application, false))
         private set
     var systemPrompt by mutableStateOf(AppPreferences.getSystemPrompt(application, "Be direct, factual, and concise."))
@@ -127,25 +109,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var maxTokens by mutableStateOf(AppPreferences.getMaxTokens(application, 512))
         private set
 
-    private var handle by mutableLongStateOf(0L)
-    private var genJob: Job? = null
-    private var cancelled = false
-
-    // Explicit LM Studio Residency & Loading Indicators
-    val isModelLoaded: Boolean get() = handle != 0L
-    val isModelLoading: Boolean get() = busy && downloadFraction == null && handle == 0L
+    val isModelLoaded: Boolean get() = inferenceCoordinator.isLoaded
+    val isModelLoading: Boolean get() = busy && downloadFraction == null && !inferenceCoordinator.isLoaded
 
     init {
-        // Restore persistent chat history from flash storage
         messages = ChatHistoryStorage.loadMessages(application)
         checkStoragePermission()
         refreshCustomModels()
         refreshLocalState()
         observeDownloadService()
     }
-
-    private var directDownloadJob: Job? = null
-    private var vmWakeLock: PowerManager.WakeLock? = null
 
     private fun observeDownloadService() {
         viewModelScope.launch {
@@ -160,7 +133,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         downloadFraction = null
                         busy = false
                         refreshLocalState()
-                        if (ModelDownloader.isDownloaded(getApplication(), selectedModel)) {
+                        if (GgufScanner.isDownloaded(getApplication(), selectedModel)) {
                             loadModelForSelected()
                         }
                     } else if (active.state.error != null) {
@@ -171,6 +144,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun checkStoragePermission(): Boolean {
+        val granted = scanManager.checkStoragePermission()
+        hasStoragePermission = granted
+        return granted
     }
 
     fun isModelDownloaded(model: LfmModel): Boolean {
@@ -189,8 +168,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadCurrentModel() {
-        if (busy || handle != 0L) return
-        if (ModelDownloader.isDownloaded(getApplication(), selectedModel)) {
+        if (busy || isModelLoaded) return
+        if (GgufScanner.isDownloaded(getApplication(), selectedModel)) {
             loadModelForSelected()
         }
     }
@@ -227,14 +206,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectModel(m: LfmModel) {
-        if (selectedModel.id == m.id && handle != 0L) return
+        if (selectedModel.id == m.id && isModelLoaded) return
         AppPreferences.saveSelectedModelId(getApplication(), m.id)
         stop()
         freeModel()
         selectedModel = m
         modelFile = null
 
-        if (ModelDownloader.isDownloaded(getApplication(), m)) {
+        if (GgufScanner.isDownloaded(getApplication(), m)) {
             loadModelForSelected()
         } else {
             status = "Selected ${m.label}. Tap Download to save locally."
@@ -245,18 +224,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         checkStoragePermission()
         refreshCustomModels()
         val ctx = getApplication<Application>()
-        val downloaded = ModelCatalog.models.filter {
-            ModelDownloader.isDownloaded(ctx, it)
-        }.map { it.id }.toSet()
-        downloadedModelIds = downloaded
+        downloadedModelIds = scanManager.getDownloadedModelIds()
 
-        if (ModelDownloader.isDownloaded(ctx, selectedModel)) {
+        if (GgufScanner.isDownloaded(ctx, selectedModel)) {
             if (modelFile == null && selectedModel.customFilePath != null) {
                 modelFile = File(selectedModel.customFilePath!!)
             } else if (modelFile == null) {
-                modelFile = ModelDownloader.destFile(ctx, selectedModel)
+                modelFile = GgufScanner.destFile(ctx, selectedModel)
             }
-            if (handle == 0L && !busy) {
+            if (!isModelLoaded && !busy) {
                 loadModelForSelected()
             }
         }
@@ -268,28 +244,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val ctx = getApplication<Application>()
             withContext(Dispatchers.Main) { isSyncingModels = true }
 
-            val detectedList = mutableListOf<LfmModel>()
-            val seenKeys = mutableSetOf<String>()
-
-            // Scan physical directories (/Download/FireLM, external app storage, internal storage)
-            // recursively up to depth 3 so user can drop files or subfolders
-            for (dir in ModelDownloader.allSearchDirs(ctx)) {
-                try {
-                    if (dir.exists() && dir.isDirectory) {
-                        val files = ModelDownloader.findGgufFilesInDir(dir, maxDepth = 3)
-                        for (f in files) {
-                            val key = f.name.lowercase()
-                            val isCatalog = ModelCatalog.models.any {
-                                it.localName.equals(f.name, ignoreCase = true) || it.file.equals(f.name, ignoreCase = true)
-                            }
-                            if (!isCatalog && !seenKeys.contains(key) && ModelDownloader.isValidGguf(f)) {
-                                detectedList.add(ModelCatalog.createCustomModel(f))
-                                seenKeys.add(key)
-                            }
-                        }
-                    }
-                } catch (_: Throwable) { }
-            }
+            val detectedList = scanManager.scanCustomModels()
 
             withContext(Dispatchers.Main) {
                 customModels = detectedList
@@ -310,7 +265,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         status = "Initializing download for ${selectedModel.label}…"
         val startedForeground = ModelDownloadService.startDownload(getApplication(), selectedModel.id)
         if (!startedForeground) {
-            // Direct in-ViewModel fallback if foreground service was restricted by OS
             runDirectDownload(selectedModel)
         }
     }
@@ -331,7 +285,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         directDownloadJob = viewModelScope.launch(Dispatchers.IO) {
             val result = ModelDownloader.download(ctx, model) { st ->
-                val active = com.lfmlocal.app.download.ActiveDownload(
+                val active = com.lfmlocal.core.download.ActiveDownload(
                     modelId = model.id,
                     modelLabel = model.label,
                     state = st,
@@ -381,7 +335,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         status = "Registering $displayName…"
         viewModelScope.launch(Dispatchers.IO) {
             val ctx = getApplication<Application>()
-            if (ModelDownloader.isValidGguf(ctx, uri)) {
+            if (GgufScanner.isValidGguf(ctx, uri)) {
                 try {
                     val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                     ctx.contentResolver.takePersistableUriPermission(uri, takeFlags)
@@ -398,7 +352,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     status = "Imported $displayName (zero-copy). Ready to load."
                 }
             } else {
-                // Fallback to local copy if direct stream validation fails
                 val result = ModelDownloader.importUri(ctx, uri, displayName)
                 withContext(Dispatchers.Main) {
                     result.onSuccess { importedFile ->
@@ -459,111 +412,83 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         busy = true
         val requestedGpu = if (computeBackend == "GPU") (if (gpuLayers > 0) gpuLayers else 32) else 0
         status = if (requestedGpu > 0) "Loading ${m.label} (GPU default with CPU fallback)…" else "Loading ${m.label} into memory (CPU)…"
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                try { LlamaBridge.nativeInit() } catch (_: Throwable) { }
 
+        viewModelScope.launch {
+            val modelPath = withContext(Dispatchers.IO) {
                 try {
                     activePfd?.close()
                     activePfd = null
                 } catch (_: Throwable) { }
 
-                val ctx = getApplication<Application>()
-                val modelPath: String? = when {
-                    m.customUriString != null -> {
-                        try {
-                            val uri = Uri.parse(m.customUriString)
-                            val pfd = ctx.contentResolver.openFileDescriptor(uri, "r")
-                            activePfd = pfd
-                            if (pfd != null) "/proc/self/fd/${pfd.fd}" else null
-                        } catch (_: Throwable) {
-                            null
-                        }
+                scanManager.resolveModelPath(m) { pfd ->
+                    activePfd = pfd
+                }
+            }
+
+            if (modelPath == null) {
+                busy = false
+                status = "Model file not found. Please sync or download again."
+                return@launch
+            }
+
+            if (modelFile == null) {
+                modelFile = File(m.file)
+            }
+
+            val loadResult = inferenceCoordinator.loadModel(
+                modelPath = modelPath,
+                contextWindowSize = contextWindowSize,
+                cpuThreads = cpuThreads,
+                requestedGpuLayers = requestedGpu
+            )
+
+            busy = false
+            if (loadResult.isSuccess) {
+                activeContextTokens = loadResult.contextSize
+                val actualGpu = loadResult.actualGpuLayers
+
+                val backendDesc = when {
+                    actualGpu > 0 -> {
+                        computeBackend = "GPU"
+                        gpuLayers = actualGpu
+                        "GPU Accelerated ($actualGpu layers)"
                     }
-                    m.customFilePath != null -> {
-                        val f = File(m.customFilePath)
-                        if (f.exists()) f.absolutePath else null
+                    requestedGpu > 0 -> {
+                        computeBackend = "CPU"
+                        gpuLayers = 0
+                        "CPU (KleidiAI NEON · Auto-offloaded from GPU)"
                     }
                     else -> {
-                        val f = ModelDownloader.destFile(ctx, m)
-                        if (f.exists()) f.absolutePath else null
+                        computeBackend = "CPU"
+                        gpuLayers = 0
+                        "CPU (KleidiAI NEON Optimized)"
                     }
                 }
-
-                if (modelPath == null) {
-                    withContext(Dispatchers.Main) {
-                        busy = false
-                        status = "Model file not found. Please sync or download again."
-                    }
-                    return@withContext
+                status = "Ready — ${selectedModel.label} · $backendDesc"
+                if (messages.isEmpty()) {
+                    messages = listOf(
+                        ChatMsg(
+                            role = "assistant",
+                            text = "Ready! Running ${selectedModel.label} offline on your device ($backendDesc). Ask me anything."
+                        )
+                    )
+                    ChatHistoryStorage.saveMessages(getApplication(), messages)
                 }
-
-                withContext(Dispatchers.Main) {
-                    if (modelFile == null) {
-                        modelFile = File(m.file)
-                    }
-                }
-
-                val h = LlamaBridge.nativeLoadModel(modelPath, contextWindowSize, cpuThreads, requestedGpu)
-                withContext(Dispatchers.Main) {
-                    busy = false
-                    if (h != 0L) {
-                        handle = h
-                        val actualGpu = try { LlamaBridge.nativeGpuLayers(h) } catch (_: Throwable) { 0 }
-                        val ctxSize = try { LlamaBridge.nativeContextSize(h) } catch (_: Throwable) { contextWindowSize }
-                        activeContextTokens = ctxSize
-
-                        val backendDesc = when {
-                            actualGpu > 0 -> {
-                                computeBackend = "GPU"
-                                gpuLayers = actualGpu
-                                "GPU Accelerated ($actualGpu layers)"
-                            }
-                            requestedGpu > 0 -> {
-                                computeBackend = "CPU"
-                                gpuLayers = 0
-                                "CPU (KleidiAI NEON · Auto-offloaded from GPU)"
-                            }
-                            else -> {
-                                computeBackend = "CPU"
-                                gpuLayers = 0
-                                "CPU (KleidiAI NEON Optimized)"
-                            }
-                        }
-                        status = "Ready — ${selectedModel.label} · $backendDesc"
-                        if (messages.isEmpty()) {
-                            messages = listOf(
-                                ChatMsg(
-                                    role = "assistant",
-                                    text = "Ready! Running ${selectedModel.label} offline on your device ($backendDesc). Ask me anything."
-                                )
-                            )
-                            ChatHistoryStorage.saveMessages(getApplication(), messages)
-                        }
-                    } else {
-                        status = "Could not load model (Out of RAM). Try a smaller 350M/700M model or reduce context."
-                    }
-                }
+            } else {
+                status = loadResult.errorMessage ?: "Could not load model."
             }
         }
     }
 
-    private fun loadModel(f: File) {
-        modelFile = f
-        loadModelForSelected()
-    }
-
     fun send(userText: String) {
         val text = userText.trim()
-        if (text.isEmpty() || busy || handle == 0L) return
+        if (text.isEmpty() || busy || !isModelLoaded) return
         messages = messages + ChatMsg(role = "user", text = text)
         ChatHistoryStorage.saveMessages(getApplication(), messages)
         streamingText = ""
         busy = true
-        cancelled = false
         status = "Thinking on-device…"
 
-        // Context-window preservation: keep last 8 turns
         val activeSystemPrompt = if (systemPromptEnabled && systemPrompt.isNotBlank()) systemPrompt.trim() else ""
         val history = messages.dropLast(1).takeLast(8).map { it.role to it.text }
         val prompt = LlamaBridge.buildLfmPrompt(activeSystemPrompt, history, text)
@@ -572,30 +497,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var tokenCount = 0
 
         genJob = viewModelScope.launch {
-            val out = LlamaBridge.generateStreaming(
-                handle = handle,
+            val out = inferenceCoordinator.generateStreaming(
                 prompt = prompt,
                 maxTokens = maxTokens,
                 temp = temperature,
                 topP = topP,
-                topK = 40,
                 repeatPenalty = repeatPenalty,
                 onToken = { piece ->
                     tokenCount++
                     viewModelScope.launch(Dispatchers.Main) {
                         streamingText += piece
                     }
-                },
-                isCancelled = { cancelled }
+                }
             )
+
             val final = out.ifBlank { streamingText }.trim()
             val elapsedSec = (System.currentTimeMillis() - startTime) / 1000.0
             val speedInfo = if (tokenCount > 0 && elapsedSec > 0.05) {
                 val tokPerSec = tokenCount / elapsedSec
-                String.format(java.util.Locale.US, "%.1f tok/s", tokPerSec)
+                String.format(Locale.US, "%.1f tok/s", tokPerSec)
             } else null
 
-            if (!cancelled) {
+            if (busy) {
                 messages = messages + ChatMsg(
                     role = "assistant",
                     text = final.ifEmpty { "(no response)" },
@@ -610,14 +533,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stop() {
-        cancelled = true
         genJob?.cancel()
-        val h = handle
-        if (h != 0L) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try { LlamaBridge.nativeStop(h) } catch (_: Throwable) { }
-            }
-        }
+        inferenceCoordinator.requestStop()
         busy = false
         if (streamingText.isNotBlank()) {
             messages = messages + ChatMsg(role = "assistant", text = streamingText.trim() + " (stopped)")
@@ -631,12 +548,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         stop()
         messages = emptyList()
         ChatHistoryStorage.clear(getApplication())
-        val h = handle
-        if (h != 0L) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try { LlamaBridge.nativeResetContext(h) } catch (_: Throwable) { }
-            }
-        }
+        inferenceCoordinator.resetContext()
         status = "Conversation cleared & context cache reset."
     }
 
@@ -649,9 +561,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val uri = Uri.parse(model.customUriString)
                 DocumentFile.fromSingleUri(ctx, uri)?.delete()
             } else if (model.customFilePath != null) {
-                File(model.customFilePath).delete()
+                File(model.customFilePath!!).delete()
             } else {
-                val target = ModelDownloader.destFile(ctx, model)
+                val target = GgufScanner.destFile(ctx, model)
                 if (target.exists()) target.delete()
             }
         } catch (_: Throwable) { }
@@ -661,17 +573,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun freeModel() {
-        val h = handle
-        handle = 0L
-        if (h != 0L) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try { LlamaBridge.nativeFreeModel(h) } catch (_: Throwable) { }
-                try {
-                    activePfd?.close()
-                    activePfd = null
-                } catch (_: Throwable) { }
-            }
-        } else {
+        viewModelScope.launch {
+            inferenceCoordinator.freeModel()
             try {
                 activePfd?.close()
                 activePfd = null
@@ -684,8 +587,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val actManager = getApplication<Application>().getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val memInfo = ActivityManager.MemoryInfo()
             actManager.getMemoryInfo(memInfo)
-            val availGb = String.format("%.1f", memInfo.availMem / (1024.0 * 1024.0 * 1024.0))
-            val totalGb = String.format("%.1f", memInfo.totalMem / (1024.0 * 1024.0 * 1024.0))
+            val availGb = String.format(Locale.US, "%.1f", memInfo.availMem / (1024.0 * 1024.0 * 1024.0))
+            val totalGb = String.format(Locale.US, "%.1f", memInfo.totalMem / (1024.0 * 1024.0 * 1024.0))
             "$availGb GB free / $totalGb GB total"
         } catch (_: Throwable) {
             "Unknown"

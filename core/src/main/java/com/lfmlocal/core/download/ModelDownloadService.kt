@@ -1,4 +1,4 @@
-package com.lfmlocal.app.download
+package com.lfmlocal.core.download
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,8 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.lfmlocal.app.MainActivity
-import com.lfmlocal.app.data.ModelCatalog
+import com.lfmlocal.core.model.ModelCatalog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -192,11 +191,12 @@ class ModelDownloadService : Service() {
             .setOngoing(true)
             .setProgress(100, progress, progress == 0)
             .setContentIntent(
-                PendingIntent.getActivity(
-                    this, 0,
-                    Intent(this, MainActivity::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
+                packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
+                    PendingIntent.getActivity(
+                        this, 0, launchIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                }
             )
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,

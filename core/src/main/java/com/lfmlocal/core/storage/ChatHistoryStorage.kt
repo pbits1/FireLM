@@ -1,7 +1,7 @@
-package com.lfmlocal.app.data
+package com.lfmlocal.core.storage
 
 import android.content.Context
-import com.lfmlocal.app.ui.ChatMsg
+import com.lfmlocal.core.model.ChatMsg
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "LFM Local"
 include(":app")
+include(":core")
+include(":engine")

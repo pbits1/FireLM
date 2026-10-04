@@ -1,4 +1,4 @@
-package com.lfmlocal.app.data
+package com.lfmlocal.core.storage
 
 import android.content.Context
 import android.content.SharedPreferences

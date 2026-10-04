@@ -1,4 +1,4 @@
-package com.lfmlocal.app.data
+package com.lfmlocal.core.model
 
 import java.io.File
 
