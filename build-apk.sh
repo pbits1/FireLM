@@ -1,28 +1,40 @@
 #!/bin/bash
 # Build FireLM APK without Android Studio — pure CLI.
-# Usage: ./build-apk.sh [debug|release]
+# Usage: ./build-apk.sh [debug|release] [--rebuild-native]
 set -e
-MODE=${1:-debug}
-export ANDROID_HOME=$HOME/Android/Sdk
-export ANDROID_SDK_ROOT=$HOME/Android/Sdk
-export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125
-export PATH=$HOME/gradle/gradle-8.7/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}
+MODE="debug"
+REBUILD=""
+
+for arg in "$@"; do
+  case "$arg" in
+    release) MODE="release" ;;
+    debug) MODE="debug" ;;
+    --rebuild-native) REBUILD="-PrebuildNative=true" ;;
+  esac
+done
+
+export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
+export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+export ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk/28.2.13676358}
+export JAVA_HOME=${JAVA_HOME:-$HOME/.jdks/jbr-21.0.11}
+export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
 cd "$(dirname "$0")"
 echo "== ANDROID_HOME=$ANDROID_HOME"
 echo "== NDK=$ANDROID_NDK_HOME"
-echo "== Java: $(java -version 2>&1 | head -n1)"
-echo "== Gradle: $(gradle --version 2>&1 | grep Gradle | head -n1)"
-echo "== Building $MODE APK (first build downloads llama.cpp + deps, ~5-10 min)..."
+echo "== Java: $($JAVA_HOME/bin/java -version 2>&1 | head -n1)"
+echo "== Building $MODE APK (100% offline, prebuilt jniLibs ready)..."
+
 if [ "$MODE" = "release" ]; then
-  gradle :app:assembleRelease --info
+  ./gradlew :app:assembleRelease $REBUILD
   echo "APK: app/build/outputs/apk/release/app-release.apk"
-  ls -lh app/build/outputs/apk/release/*.apk
+  ls -lh app/build/outputs/apk/release/*.apk 2>/dev/null || true
 else
-  gradle :app:assembleDebug
+  ./gradlew :app:assembleDebug $REBUILD
   echo "APK: app/build/outputs/apk/debug/app-debug.apk"
   ls -lh app/build/outputs/apk/debug/*.apk
 fi
+
 echo ""
 echo "Install to phone (USB debugging ON):"
-echo "  adb install -r app/build/outputs/apk/debug/app-debug.apk"
+echo "  adb install -r app/build/outputs/apk/$MODE/app-$MODE.apk"

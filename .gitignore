@@ -48,6 +48,16 @@ captures/
 .cxx/
 app/.cxx/
 
+# Precompiled native libraries (build locally via CMake / build-apk.sh)
+app/src/main/jniLibs/
+
+# Model files & weights
+*.gguf
+*.bin
+app/src/main/cpp/llama.cpp/models/
+
+
 # OS specific
 .DS_Store
 Thumbs.db
+

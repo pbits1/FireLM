@@ -4,6 +4,10 @@ project(lfm_jni)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 16 KB page size alignment for Android 15+
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+
 if(DEFINED ANDROID_ABI)
     if(ANDROID_ABI STREQUAL "arm64-v8a")
         set(GGML_SYSTEM_ARCH "ARM" CACHE STRING "" FORCE)
@@ -23,26 +27,20 @@ if(DEFINED ANDROID_ABI)
     # Provide pristine Khronos Vulkan C++ headers (vulkan/vulkan.hpp) via isolated vulkan_include
     include_directories(SYSTEM "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_include")
 
-    # SPIRV-Headers is a header-only package installed on the host.
-    # The NDK toolchain restricts find_package to the sysroot, so we
-    # temporarily allow searching the host cmake prefix too.
+    # Provide local SPIRV-Headers package config so find_package(SPIRV-Headers CONFIG) succeeds
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Headers")
+    set(SPIRV-Headers_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Headers" CACHE PATH "" FORCE)
     set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 endif()
 
-# llama.cpp upstream. `master` tracks LFM2 arch support (old bXXXX tags retired in 2025).
-include(FetchContent)
+# Local vendored llama.cpp — 100% offline, zero network clone
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 
-FetchContent_Declare(
-  llama
-  GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-  GIT_TAG        master
-  GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(llama)
+set(llama_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp")
+add_subdirectory(llama.cpp)
 
 add_library(lfm_jni SHARED
   llama_jni.cpp
