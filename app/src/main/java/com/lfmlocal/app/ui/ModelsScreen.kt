@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,19 +34,20 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.lfmlocal.core.model.LfmModel
-import com.lfmlocal.core.model.ModelCatalog
-import com.lfmlocal.core.download.ModelDownloader
 import com.lfmlocal.app.ui.components.DirectorySyncCard
 import com.lfmlocal.app.ui.components.ModelCard
 import com.lfmlocal.app.ui.components.StoragePermissionBanner
 import com.lfmlocal.app.ui.theme.*
+import com.lfmlocal.core.download.ModelDownloader
+import com.lfmlocal.core.model.LfmModel
+import com.lfmlocal.core.model.ModelCatalog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val storageMb = remember { ModelDownloader.getAvailableStorageMb(ctx) }
+    var selectedFilter by remember { mutableStateOf("ALL") }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -99,12 +101,12 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
     }
 
     Scaffold(
-        containerColor = ObsidianCanvas,
+        containerColor = CarbonCanvas,
         topBar = {
             Surface(
-                color = ObsidianSurface,
-                border = BorderStroke(1.dp, ObsidianBorderSubtle),
-                shadowElevation = 4.dp
+                color = ConsoleSlate,
+                border = BorderStroke(1.dp, ConsoleBorder),
+                shadowElevation = 6.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -116,7 +118,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Chat",
+                            contentDescription = "Back to Playground",
                             tint = TextPrimary
                         )
                     }
@@ -125,31 +127,43 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
 
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "Model Library",
+                            text = "Model Management Console",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                         Text(
-                            "llama.cpp Native Engine · Mali GPU Acceleration",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = ElectricCyanDim
+                            text = "llama.cpp Engine · Mali GPU Acceleration",
+                            style = TelemetryMicroStyle,
+                            color = PhosphorCyanDim
                         )
                     }
 
-                    // Import Button
-                    OutlinedButton(
+                    // Import Custom GGUF Button
+                    Surface(
                         onClick = { filePicker.launch(arrayOf("*/*")) },
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, ObsidianBorder),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = ElectricCyan
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        color = InsetField,
+                        border = BorderStroke(1.dp, ConsoleBorderStrong)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Import .gguf", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                tint = PhosphorCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "IMPORT",
+                                style = TelemetryMicroStyle,
+                                fontWeight = FontWeight.Bold,
+                                color = PhosphorCyan
+                            )
+                        }
                     }
                 }
             }
@@ -159,59 +173,93 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(pad)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+                .padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
         ) {
-            // Hardware HUD Overview Card
+            // Hardware RAM & Storage HUD Card
             item {
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = ObsidianSurfaceElevated,
-                    border = BorderStroke(1.dp, ObsidianBorder),
-                    shadowElevation = 4.dp
+                    shape = RoundedCornerShape(14.dp),
+                    color = InsetField,
+                    border = BorderStroke(1.dp, ConsoleBorder),
+                    shadowElevation = 2.dp
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(14.dp)
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = ElectricCyanContainer,
-                            modifier = Modifier.size(42.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Storage,
-                                    contentDescription = null,
-                                    tint = ElectricCyan,
-                                    modifier = Modifier.size(22.dp)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = PhosphorCyanContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Storage,
+                                        contentDescription = null,
+                                        tint = PhosphorCyan,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.width(10.dp))
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = "SYSTEM MEMORY & STORAGE HUD",
+                                    style = TelemetryMicroStyle,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextMuted
+                                )
+                                Spacer(Modifier.height(1.dp))
+                                Text(
+                                    text = "${String.format("%,d", storageMb)} MB Free Storage",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+
+                            // VRAM Residency readout
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (vm.isModelLoaded) MatrixEmeraldContainer else ConsoleHighlight,
+                                border = BorderStroke(1.dp, if (vm.isModelLoaded) MatrixEmerald.copy(alpha = 0.4f) else ConsoleBorderSubtle)
+                            ) {
+                                Text(
+                                    text = if (vm.isModelLoaded) "VRAM ACTIVE" else "0 MB VRAM",
+                                    style = TelemetryMicroStyle.copy(fontSize = 8.5.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (vm.isModelLoaded) MatrixEmerald else TextMuted,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.width(14.dp))
+                        Spacer(Modifier.height(8.dp))
 
-                        Column(Modifier.weight(1f)) {
+                        // RAM Details
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                "DEVICE STORAGE & MEMORY",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = TextMuted
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "${String.format("%,d", storageMb)} MB Free Storage",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                text = "Device Memory:",
+                                style = TelemetryMicroStyle,
+                                color = TextSecondary
                             )
                             Text(
-                                "RAM: ${vm.getDeviceRamInfo()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = HyperEmerald
+                                text = vm.getDeviceRamInfo(),
+                                style = TelemetryMetricStyle,
+                                color = MatrixEmerald
                             )
                         }
                     }
@@ -227,7 +275,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 }
             }
 
-            // Models Storage Directory & Dynamic Sync Card
+            // Direct Storage Directory & Rescan Deck
             item {
                 DirectorySyncCard(
                     isSyncing = vm.isSyncingModels,
@@ -241,109 +289,153 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 )
             }
 
-            // Custom & Local Models Header (Positioned at TOP for immediate visibility)
+            // Filter Tabs Bar
             item {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.FolderSpecial,
-                        contentDescription = null,
-                        tint = AuraViolet,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Custom & Local Models (/Download/FireLM)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = ObsidianSurfaceElevated,
-                        border = BorderStroke(1.dp, ObsidianBorderSubtle)
-                    ) {
-                        Text(
-                            "${vm.customModels.size} found",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = if (vm.customModels.isNotEmpty()) HyperEmerald else TextMuted,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            if (vm.customModels.isNotEmpty()) {
-                items(vm.customModels, key = { it.id }) { custom ->
-                    ModelCard(
-                        model = custom,
-                        vm = vm,
-                        ctx = ctx
-                    )
-                }
-            } else {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = ObsidianSurface,
-                        border = BorderStroke(1.dp, ObsidianBorderSubtle)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                    listOf("ALL", "LOCAL / GGUF", "RECOMMENDED").forEach { filterTag ->
+                        val isFilterSelected = selectedFilter == filterTag
+                        Surface(
+                            onClick = { selectedFilter = filterTag },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isFilterSelected) InsetField else ConsoleSlate,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isFilterSelected) SolarAmber else ConsoleBorderSubtle
+                            ),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text(
-                                if (!vm.hasStoragePermission)
-                                    "Storage permission required to scan /Download/FireLM.\nTap 'Grant Storage Access' above."
-                                else
-                                    "No custom models detected in /Download/FireLM yet.\nDrop any .gguf file into Download/FireLM and tap Sync.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted,
-                                textAlign = TextAlign.Center
-                            )
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = filterTag,
+                                    style = TelemetryMicroStyle,
+                                    fontWeight = if (isFilterSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isFilterSelected) SolarAmber else TextSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Presets Header
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = ElectricCyan,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Optimized Liquid AI Models",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+            // Custom & Local Models Header
+            if (selectedFilter != "RECOMMENDED") {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.FolderSpecial,
+                            contentDescription = null,
+                            tint = WorkstationViolet,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "CUSTOM & LOCAL MODELS (/Download/FireLM)",
+                            style = TelemetryMicroStyle,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = InsetField,
+                            border = BorderStroke(1.dp, ConsoleBorderSubtle)
+                        ) {
+                            Text(
+                                text = "${vm.customModels.size} FOUND",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = TelemetryMicroStyle.copy(fontSize = 9.sp),
+                                color = if (vm.customModels.isNotEmpty()) MatrixEmerald else TextMuted,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                if (vm.customModels.isNotEmpty()) {
+                    items(vm.customModels, key = { it.id }) { custom ->
+                        ModelCard(
+                            model = custom,
+                            vm = vm,
+                            ctx = ctx
+                        )
+                    }
+                } else {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = ConsoleSlate,
+                            border = BorderStroke(1.dp, ConsoleBorderSubtle)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (!vm.hasStoragePermission)
+                                        "Storage permission required to scan /Download/FireLM.\nTap 'Grant Storage Access' above."
+                                    else
+                                        "No custom models detected in /Download/FireLM yet.\nDrop any .gguf file into Download/FireLM and tap Sync.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMuted,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            items(ModelCatalog.models, key = { it.id }) { m ->
-                ModelCard(
-                    model = m,
-                    vm = vm,
-                    ctx = ctx
-                )
+            // Catalog Presets Header
+            if (selectedFilter != "LOCAL / GGUF") {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = PhosphorCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "OPTIMIZED LIQUID AI MODELS",
+                            style = TelemetryMicroStyle,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
+                val catalogModels = if (selectedFilter == "RECOMMENDED") {
+                    ModelCatalog.models.filter { it.recommended }
+                } else {
+                    ModelCatalog.models
+                }
+
+                items(catalogModels, key = { it.id }) { m ->
+                    ModelCard(
+                        model = m,
+                        vm = vm,
+                        ctx = ctx
+                    )
+                }
             }
 
             item {

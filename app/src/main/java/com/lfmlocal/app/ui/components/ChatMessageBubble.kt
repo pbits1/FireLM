@@ -2,39 +2,88 @@ package com.lfmlocal.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lfmlocal.app.ui.theme.*
 import com.lfmlocal.core.model.ChatMsg
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlinx.coroutines.delay
+
+sealed class ContentSegment {
+    data class Text(val text: String) : ContentSegment()
+    data class Code(val language: String, val code: String) : ContentSegment()
+}
+
+fun parseMessageContent(raw: String): List<ContentSegment> {
+    val segments = mutableListOf<ContentSegment>()
+    val lines = raw.lines()
+    var inCodeBlock = false
+    var currentLanguage = ""
+    val currentBuffer = StringBuilder()
+
+    for (line in lines) {
+        val trimmed = line.trim()
+        if (trimmed.startsWith("```")) {
+            if (!inCodeBlock) {
+                if (currentBuffer.isNotEmpty()) {
+                    segments.add(ContentSegment.Text(currentBuffer.toString().trimEnd()))
+                    currentBuffer.clear()
+                }
+                inCodeBlock = true
+                currentLanguage = trimmed.removePrefix("```").trim().uppercase().ifEmpty { "CODE" }
+            } else {
+                segments.add(ContentSegment.Code(currentLanguage, currentBuffer.toString().trimEnd()))
+                currentBuffer.clear()
+                inCodeBlock = false
+                currentLanguage = ""
+            }
+        } else {
+            if (currentBuffer.isNotEmpty()) {
+                currentBuffer.append("\n")
+            }
+            currentBuffer.append(line)
+        }
+    }
+
+    if (currentBuffer.isNotEmpty()) {
+        if (inCodeBlock) {
+            segments.add(ContentSegment.Code(currentLanguage, currentBuffer.toString().trimEnd()))
+        } else {
+            segments.add(ContentSegment.Text(currentBuffer.toString().trimEnd()))
+        }
+    }
+
+    return if (segments.isEmpty()) listOf(ContentSegment.Text(raw)) else segments
+}
 
 @Composable
 fun ChatBubble(msg: ChatMsg, backend: String) {
     val isUser = msg.role == "user"
     val clipboardManager = LocalClipboardManager.current
-    val timeStr = remember(msg.timestamp) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp))
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1800)
+            copied = false
+        }
     }
 
     Row(
@@ -42,152 +91,79 @@ fun ChatBubble(msg: ChatMsg, backend: String) {
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         if (isUser) {
-            // User Message: Sleek asymmetric gradient bubble
+            // User Prompt Bubble: Soft rounded pill
             Surface(
-                shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
-                color = Color.Transparent,
-                modifier = Modifier
-                    .widthIn(max = 320.dp)
-                    .clip(RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(UserBubbleTop, UserBubbleBottom)
-                        )
-                    )
+                shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 330.dp)
             ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text(
-                        text = msg.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        lineHeight = 22.sp
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = timeStr,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.align(Alignment.End)
-                    )
-                }
+                Text(
+                    text = msg.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
             }
         } else {
-            // Assistant Message: Obsidian elevated card with glowing telemetry chip
-            Surface(
-                shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
-                color = ObsidianSurfaceElevated,
-                border = BorderStroke(1.dp, ObsidianBorder),
-                shadowElevation = 3.dp,
-                modifier = Modifier.widthIn(max = 350.dp)
+            // Assistant Message: Borderless flowing typography (Claude / ChatGPT style)
+            val segments = remember(msg.text) { parseMessageContent(msg.text) }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 16.dp, top = 2.dp, bottom = 6.dp)
             ) {
-                Column(Modifier.padding(14.dp)) {
-                    // Header row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = ElectricCyanContainer,
-                            modifier = Modifier.size(22.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Bolt,
-                                    contentDescription = null,
-                                    tint = ElectricCyan,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Assistant",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricCyan
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (backend == "GPU") HyperEmeraldContainer else ObsidianSurfaceHighlight
-                        ) {
+                // Content Segments
+                segments.forEach { segment ->
+                    when (segment) {
+                        is ContentSegment.Text -> {
                             Text(
-                                if (backend == "GPU") "Vulkan GPU" else "KleidiAI CPU",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                color = if (backend == "GPU") HyperEmerald else SunsetAmber,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                text = segment.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
+                        is ContentSegment.Code -> {
+                            Spacer(Modifier.height(8.dp))
+                            AppleCodeBlock(language = segment.language, code = segment.code)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
 
-                        Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(6.dp))
 
-                        Text(
-                            timeStr,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = TextMuted
+                // Whisper-Quiet Action Row (Copy + Discreet Speed)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(msg.text))
+                            copied = true
+                        },
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(
+                            if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                            contentDescription = "Copy message",
+                            modifier = Modifier.size(15.dp),
+                            tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                         )
                     }
 
-                    Spacer(Modifier.height(8.dp))
-
-                    // Message text
-                    Text(
-                        text = msg.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextPrimary,
-                        lineHeight = 22.sp
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Telemetry & Copy action row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val stats = msg.speedStats
-                        if (stats != null) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = ObsidianCanvas,
-                                border = BorderStroke(1.dp, ObsidianBorderSubtle)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.Speed,
-                                        contentDescription = null,
-                                        tint = HyperEmerald,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        stats,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                        color = HyperEmerald,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        } else {
-                            Spacer(Modifier.width(1.dp))
-                        }
-
-                        IconButton(
-                            onClick = { clipboardManager.setText(AnnotatedString(msg.text)) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = "Copy text",
-                                modifier = Modifier.size(15.dp),
-                                tint = TextSecondary
-                            )
-                        }
+                    val stats = msg.speedStats
+                    if (stats != null) {
+                        // Extract tok/s compactly, e.g. "29.2 tok/s"
+                        val tokSec = Regex("""([0-9.]+\s*tok/s)""").find(stats)?.value ?: stats
+                        Text(
+                            text = tokSec,
+                            style = TelemetryMetricStyle,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
                     }
                 }
             }
@@ -196,66 +172,91 @@ fun ChatBubble(msg: ChatMsg, backend: String) {
 }
 
 @Composable
-fun StreamingBubble(text: String, backend: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start
+fun AppleCodeBlock(language: String, code: String) {
+    val clipboardManager = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2000)
+            copied = false
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
-            color = ObsidianSurfaceElevated,
-            border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.4f)),
-            shadowElevation = 4.dp,
-            modifier = Modifier.widthIn(max = 350.dp)
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = ElectricCyanContainer,
-                        modifier = Modifier.size(22.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = ElectricCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Assistant (Streaming…)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = ElectricCyan
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (backend == "GPU") HyperEmeraldContainer else ObsidianSurfaceHighlight
-                    ) {
-                        Text(
-                            if (backend == "GPU") "Vulkan GPU" else "KleidiAI CPU",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                            color = if (backend == "GPU") HyperEmerald else SunsetAmber,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
+        Column {
+            // Header bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "$text ▊",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
-                    lineHeight = 22.sp,
-                    fontFamily = FontFamily.Default
+                    text = language.lowercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+
+                Row(
+                    modifier = Modifier
+                        .clickable {
+                            clipboardManager.setText(AnnotatedString(code))
+                            copied = true
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (copied) "Copied" else "Copy",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+
+            // Scrollable Code Content
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 14.dp, end = 14.dp, bottom = 12.dp, top = 2.dp)
+            ) {
+                Text(
+                    text = code,
+                    style = CodeSnippetStyle,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
+    }
+}
+
+@Composable
+fun StreamingBubble(text: String, backend: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = 16.dp, top = 2.dp, bottom = 6.dp)
+    ) {
+        Text(
+            text = "$text ▋",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -264,31 +265,13 @@ fun ThinkingIndicator(backend: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 6.dp, top = 4.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = ObsidianSurfaceElevated,
-            border = BorderStroke(1.dp, ObsidianBorderSubtle),
-            modifier = Modifier.padding(vertical = 4.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    strokeWidth = 2.dp,
-                    color = ElectricCyan
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    if (backend == "GPU") "Synthesizing on Mali GPU via Vulkan…" else "Synthesizing with CPU KleidiAI ukernels…",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
-                )
-            }
-        }
+        Text(
+            text = "Thinking…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.tertiary
+        )
     }
 }

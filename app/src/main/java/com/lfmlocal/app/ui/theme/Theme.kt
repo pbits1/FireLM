@@ -1,59 +1,98 @@
 package com.lfmlocal.app.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val LfmDarkColorScheme = darkColorScheme(
-    primary = ElectricCyan,
-    onPrimary = OnElectricCyan,
-    primaryContainer = ElectricCyanContainer,
-    onPrimaryContainer = TextPrimary,
+private val MonochromeDarkColorScheme = darkColorScheme(
+    primary = DarkAccent,
+    onPrimary = DarkOnAccent,
+    primaryContainer = DarkSurfaceElevated,
+    onPrimaryContainer = DarkTextPrimary,
 
-    secondary = HyperEmerald,
-    onSecondary = Color(0xFF012015),
-    secondaryContainer = HyperEmeraldContainer,
-    onSecondaryContainer = Color(0xFFD1FAE5),
+    secondary = DarkTextSecondary,
+    onSecondary = DarkOnAccent,
+    secondaryContainer = DarkSurface,
+    onSecondaryContainer = DarkTextPrimary,
 
-    tertiary = AuraViolet,
-    onTertiary = Color.White,
-    tertiaryContainer = AuraVioletContainer,
-    onTertiaryContainer = Color(0xFFF3E8FF),
+    tertiary = DarkTextMuted,
+    onTertiary = DarkOnAccent,
+    tertiaryContainer = DarkSurface,
+    onTertiaryContainer = DarkTextPrimary,
 
-    background = ObsidianCanvas,
-    onBackground = TextPrimary,
+    background = DarkCanvas,
+    onBackground = DarkTextPrimary,
 
-    surface = ObsidianSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = ObsidianSurfaceElevated,
-    onSurfaceVariant = TextSecondary,
-    surfaceContainer = ObsidianSurfaceElevated,
-    surfaceContainerHigh = ObsidianSurfaceHighlight,
+    surface = DarkSurface,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkSurfaceElevated,
+    onSurfaceVariant = DarkTextSecondary,
+    surfaceContainer = DarkSurface,
+    surfaceContainerHigh = DarkSurfaceElevated,
+    surfaceContainerHighest = DarkSurfaceHighlight,
 
-    outline = ObsidianBorder,
-    outlineVariant = ObsidianBorderSubtle,
+    outline = DarkBorder,
+    outlineVariant = DarkBorderSubtle,
 
-    error = RadiantRose,
-    onError = Color.White
+    error = DarkDestructive,
+    onError = DarkAccent
+)
+
+private val MonochromeLightColorScheme = lightColorScheme(
+    primary = LightAccent,
+    onPrimary = LightOnAccent,
+    primaryContainer = LightSurfaceElevated,
+    onPrimaryContainer = LightTextPrimary,
+
+    secondary = LightTextSecondary,
+    onSecondary = LightOnAccent,
+    secondaryContainer = LightSurface,
+    onSecondaryContainer = LightTextPrimary,
+
+    tertiary = LightTextMuted,
+    onTertiary = LightOnAccent,
+    tertiaryContainer = LightSurface,
+    onTertiaryContainer = LightTextPrimary,
+
+    background = LightCanvas,
+    onBackground = LightTextPrimary,
+
+    surface = LightSurface,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightSurfaceElevated,
+    onSurfaceVariant = LightTextSecondary,
+    surfaceContainer = LightSurface,
+    surfaceContainerHigh = LightSurfaceElevated,
+    surfaceContainerHighest = LightSurfaceHighlight,
+
+    outline = LightBorder,
+    outlineVariant = LightBorderSubtle,
+
+    error = LightDestructive,
+    onError = LightOnAccent
 )
 
 val LfmShapes = Shapes(
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(30.dp)
+    extraLarge = RoundedCornerShape(28.dp)
 )
 
 @Composable
 fun LfmTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val colorScheme = if (darkTheme) MonochromeDarkColorScheme else MonochromeLightColorScheme
     MaterialTheme(
-        colorScheme = LfmDarkColorScheme,
+        colorScheme = colorScheme,
+        typography = LfmTypography,
         shapes = LfmShapes,
         content = content
     )

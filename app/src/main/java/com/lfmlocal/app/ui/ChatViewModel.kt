@@ -109,6 +109,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var maxTokens by mutableStateOf(AppPreferences.getMaxTokens(application, 512))
         private set
 
+    // Appearance (System, Dark, Light)
+    var themeMode by mutableStateOf(AppPreferences.getThemeMode(application, "dark"))
+        private set
+
     val isModelLoaded: Boolean get() = inferenceCoordinator.isLoaded
     val isModelLoading: Boolean get() = busy && downloadFraction == null && !inferenceCoordinator.isLoaded
 
@@ -165,6 +169,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSystemPromptEnabled(enabled: Boolean) {
         systemPromptEnabled = enabled
         AppPreferences.saveSystemPromptEnabled(getApplication(), enabled)
+    }
+
+    fun updateThemeMode(mode: String) {
+        themeMode = mode
+        AppPreferences.saveThemeMode(getApplication(), mode)
     }
 
     fun loadCurrentModel() {

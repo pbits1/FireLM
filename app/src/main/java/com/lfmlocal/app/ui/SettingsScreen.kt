@@ -31,12 +31,12 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
     val scrollState = rememberScrollState()
 
     Scaffold(
-        containerColor = ObsidianCanvas,
+        containerColor = CarbonCanvas,
         topBar = {
             Surface(
-                color = ObsidianSurface,
-                border = BorderStroke(1.dp, ObsidianBorderSubtle),
-                shadowElevation = 4.dp
+                color = ConsoleSlate,
+                border = BorderStroke(1.dp, ConsoleBorder),
+                shadowElevation = 6.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -48,7 +48,7 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = "Back to Playground",
                             tint = TextPrimary
                         )
                     }
@@ -57,15 +57,15 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
 
                     Column {
                         Text(
-                            "Tuning & Diagnostics",
+                            text = "Diagnostics & Machine Room",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                         Text(
-                            "Hardware Engine & Model Alignment",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = ElectricCyanDim
+                            text = "Hardware Engine & Model Alignment",
+                            style = TelemetryMicroStyle,
+                            color = PhosphorCyanDim
                         )
                     }
                 }
@@ -77,21 +77,21 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Section 1: System Prompt & Instructions (LM Studio style)
-            SettingsCard(
+            // Section 1: System Directives Deck (LM Studio Style)
+            WorkstationPanel(
                 icon = Icons.Default.EditNote,
-                iconTint = ElectricCyan,
-                title = "System Prompt & Instructions",
-                subtitle = "Configure optional system directives. Small on-device models (350M–1.2B) run fastest and most reliably with system prompt disabled or kept concise."
+                iconTint = PhosphorCyan,
+                title = "System Directives & Instructions",
+                subtitle = "Configure optional system directives. Small on-device models (355M–1.3B) generate fastest and adhere best when directives are direct or kept concise."
             ) {
                 // Enable/Disable Toggle Surface
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = ObsidianCanvas,
-                    border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                    shape = RoundedCornerShape(10.dp),
+                    color = CarbonCanvas,
+                    border = BorderStroke(1.dp, ConsoleBorderSubtle)
                 ) {
                     Row(
                         modifier = Modifier
@@ -102,16 +102,17 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Enable System Prompt",
+                                text = "Enable System Directives",
                                 style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                if (vm.systemPromptEnabled) "Custom instructions are active for chat turns."
-                                else "Disabled: Model runs unconstrained (recommended for 350M).",
+                                text = if (vm.systemPromptEnabled) "Custom instructions will be prepended to the context."
+                                else "Disabled: Model runs unconstrained (recommended for 355M).",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (vm.systemPromptEnabled) ElectricCyan else TextMuted
+                                color = if (vm.systemPromptEnabled) PhosphorCyan else TextMuted
                             )
                         }
                         Switch(
@@ -119,8 +120,8 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             onCheckedChange = { vm.updateSystemPromptEnabled(it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = ElectricCyan,
-                                uncheckedTrackColor = ObsidianSurfaceHighlight
+                                checkedTrackColor = SolarAmber,
+                                uncheckedTrackColor = ConsoleHighlight
                             )
                         )
                     }
@@ -132,42 +133,43 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             value = vm.systemPrompt,
                             onValueChange = { vm.updateSystemPrompt(it) },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Desired System Instructions", color = TextSecondary) },
-                            placeholder = { Text("e.g. Be concise, direct, and factual. Avoid fluff.", color = TextMuted) },
+                            label = { Text("System Instructions", color = TextSecondary, style = TelemetryMicroStyle) },
+                            placeholder = { Text("e.g. Be direct, factual, and concise. Avoid conversational fluff.", color = TextMuted) },
                             minLines = 3,
                             maxLines = 6,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = TextPrimary,
                                 unfocusedTextColor = TextPrimary,
-                                focusedBorderColor = ElectricCyan,
-                                unfocusedBorderColor = ObsidianBorder,
-                                focusedContainerColor = ObsidianCanvas,
-                                unfocusedContainerColor = ObsidianCanvas
+                                focusedBorderColor = SolarAmber,
+                                unfocusedBorderColor = ConsoleBorder,
+                                focusedContainerColor = CarbonCanvas,
+                                unfocusedContainerColor = CarbonCanvas
                             )
                         )
 
-                        // Quick Starter Chips
+                        // Quick Starter Directives
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             listOf(
-                                "Be Direct" to "Be direct, factual, and concise. No conversational fluff.",
+                                "Direct" to "Be direct, factual, and concise. No conversational fluff.",
                                 "Code Only" to "Write clean, idiomatic code with best practices. Output code directly without chit-chat.",
                                 "Clear" to ""
                             ).forEach { (label, text) ->
                                 OutlinedButton(
                                     onClick = { vm.updateSystemPrompt(text) },
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, ObsidianBorderSubtle),
+                                    border = BorderStroke(1.dp, ConsoleBorderSubtle),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(
-                                        label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (label == "Clear") RadiantRose else TextSecondary
+                                        text = label.uppercase(),
+                                        style = TelemetryMicroStyle,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (label == "Clear") SignalRose else TextSecondary
                                     )
                                 }
                             }
@@ -176,11 +178,11 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 }
             }
 
-            // Section 2: Hardware Acceleration & Compute Engine
-            SettingsCard(
+            // Section 2: Hardware Acceleration & Compute Matrix
+            WorkstationPanel(
                 icon = Icons.Default.Bolt,
-                iconTint = ElectricCyan,
-                title = "Hardware Acceleration & Engine",
+                iconTint = SolarAmber,
+                title = "Hardware Acceleration Matrix",
                 subtitle = "Select inference compute target. GPU offloads neural layers to Mali-G68 OpenCL/Vulkan; CPU leverages ARM NEON ukernels."
             ) {
                 // Compute Target Selection Cards
@@ -191,11 +193,11 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     val isGpu = vm.computeBackend == "GPU"
                     Surface(
                         onClick = { vm.selectComputeBackend("GPU") },
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isGpu) ObsidianSurfaceHighlight else ObsidianCanvas,
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isGpu) InsetField else CarbonCanvas,
                         border = BorderStroke(
-                            width = if (isGpu) 1.5.dp else 1.dp,
-                            color = if (isGpu) ElectricCyan else ObsidianBorderSubtle
+                            width = 1.dp,
+                            color = if (isGpu) MatrixEmerald else ConsoleBorderSubtle
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -204,17 +206,17 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                                 Text("🚀", fontSize = 16.sp)
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    "GPU Vulkan",
-                                    style = MaterialTheme.typography.titleSmall,
+                                    text = "GPU VULKAN",
+                                    style = TelemetryMetricStyle,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isGpu) ElectricCyan else TextPrimary
+                                    color = if (isGpu) MatrixEmerald else TextPrimary
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Fastest Prefill (12+ tok/s)",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = if (isGpu) HyperEmerald else TextMuted
+                                text = "Mali-G68 OpenCL / Vulkan",
+                                style = TelemetryMicroStyle,
+                                color = if (isGpu) MatrixEmerald else TextMuted
                             )
                         }
                     }
@@ -222,11 +224,11 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     val isCpu = vm.computeBackend == "CPU"
                     Surface(
                         onClick = { vm.selectComputeBackend("CPU") },
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isCpu) ObsidianSurfaceHighlight else ObsidianCanvas,
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isCpu) InsetField else CarbonCanvas,
                         border = BorderStroke(
-                            width = if (isCpu) 1.5.dp else 1.dp,
-                            color = if (isCpu) SunsetAmber else ObsidianBorderSubtle
+                            width = 1.dp,
+                            color = if (isCpu) SolarAmber else ConsoleBorderSubtle
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -235,17 +237,17 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                                 Text("⚡", fontSize = 16.sp)
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    "CPU KleidiAI",
-                                    style = MaterialTheme.typography.titleSmall,
+                                    text = "CPU KLEIDIAI",
+                                    style = TelemetryMetricStyle,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isCpu) SunsetAmber else TextPrimary
+                                    color = if (isCpu) SolarAmber else TextPrimary
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "ARM NEON DotProd",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = if (isCpu) SunsetAmber else TextMuted
+                                text = "ARM NEON DotProd ukernels",
+                                style = TelemetryMicroStyle,
+                                color = if (isCpu) SolarAmber else TextMuted
                             )
                         }
                     }
@@ -256,7 +258,7 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(ObsidianCanvas, RoundedCornerShape(12.dp))
+                            .background(CarbonCanvas, RoundedCornerShape(10.dp))
                             .padding(12.dp)
                     ) {
                         Row(
@@ -264,11 +266,16 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("GPU Offloaded Layers", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
                             Text(
-                                "${vm.gpuLayers} / 32 layers",
+                                text = "GPU Offloaded Layers",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "${vm.gpuLayers} / 32 LAYERS",
+                                style = TelemetryMetricStyle,
                                 fontWeight = FontWeight.Bold,
-                                color = ElectricCyan
+                                color = MatrixEmerald
                             )
                         }
                         Slider(
@@ -277,19 +284,28 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             valueRange = 1f..32f,
                             steps = 30,
                             colors = SliderDefaults.colors(
-                                thumbColor = ElectricCyan,
-                                activeTrackColor = ElectricCyan,
-                                inactiveTrackColor = ObsidianBorder
+                                thumbColor = MatrixEmerald,
+                                activeTrackColor = MatrixEmerald,
+                                inactiveTrackColor = ConsoleBorder
                             )
                         )
                     }
                 }
 
-                // Context Window Size
+                // Context Window Allocator
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Context Window Size", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
-                        Text("${vm.contextWindowSize} tokens", fontWeight = FontWeight.Bold, color = ElectricCyan)
+                        Text(
+                            text = "Context Window Allocator",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${vm.contextWindowSize} TOKENS",
+                            style = TelemetryMetricStyle,
+                            fontWeight = FontWeight.Bold,
+                            color = PhosphorCyan
+                        )
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -299,27 +315,27 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             val selected = vm.contextWindowSize == size
                             Surface(
                                 onClick = { vm.selectContextSize(size) },
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (selected) ElectricCyanContainer else ObsidianCanvas,
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) PhosphorCyanContainer else CarbonCanvas,
                                 border = BorderStroke(
                                     1.dp,
-                                    if (selected) ElectricCyan else ObsidianBorderSubtle
+                                    if (selected) PhosphorCyan else ConsoleBorderSubtle
                                 ),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(vertical = 10.dp)
+                                    modifier = Modifier.padding(vertical = 8.dp)
                                 ) {
                                     Text(
-                                        when (size) {
+                                        text = when (size) {
                                             2048 -> "2K (Fastest)"
                                             4096 -> "4K (Balanced)"
                                             else -> "8K (Full)"
                                         },
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = TelemetryMicroStyle,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (selected) ElectricCyan else TextSecondary
+                                        color = if (selected) PhosphorCyan else TextSecondary
                                     )
                                 }
                             }
@@ -327,17 +343,26 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                // CPU Inference Threads
+                // CPU Inference Threads Slider
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(ObsidianCanvas, RoundedCornerShape(12.dp))
+                        .background(CarbonCanvas, RoundedCornerShape(10.dp))
                         .padding(12.dp)
                 ) {
                     val maxCores = Runtime.getRuntime().availableProcessors()
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("CPU Inference Threads", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
-                        Text("${vm.cpuThreads} threads", fontWeight = FontWeight.Bold, color = HyperEmerald)
+                        Text(
+                            text = "CPU Inference Threads",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${vm.cpuThreads} THREADS",
+                            style = TelemetryMetricStyle,
+                            fontWeight = FontWeight.Bold,
+                            color = SolarAmber
+                        )
                     }
                     Slider(
                         value = vm.cpuThreads.toFloat(),
@@ -345,23 +370,23 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                         valueRange = 1f..maxCores.toFloat(),
                         steps = maxOf(0, maxCores - 2),
                         colors = SliderDefaults.colors(
-                            thumbColor = HyperEmerald,
-                            activeTrackColor = HyperEmerald,
-                            inactiveTrackColor = ObsidianBorder
+                            thumbColor = SolarAmber,
+                            activeTrackColor = SolarAmber,
+                            inactiveTrackColor = ConsoleBorder
                         )
                     )
                     Text(
-                        "Optimal: 3 threads on Dimensity 920 pins to prime Cortex-A78 big cores without thermal throttling.",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Optimal: 3-4 threads pins to prime big ARM Cortex cores without causing thermal throttling.",
+                        style = TelemetryMicroStyle,
                         color = TextMuted
                     )
                 }
 
-                // Sustained Boost / Game Mode Switch
+                // Sustained Performance Mode Switch
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = ObsidianCanvas,
-                    border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                    shape = RoundedCornerShape(10.dp),
+                    color = CarbonCanvas,
+                    border = BorderStroke(1.dp, ConsoleBorderSubtle)
                 ) {
                     Row(
                         modifier = Modifier
@@ -375,15 +400,20 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                                 Icon(
                                     Icons.Default.SportsEsports,
                                     contentDescription = null,
-                                    tint = HyperEmerald,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = MatrixEmerald,
+                                    modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("Game Mode / Sustained Boost", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+                                Text(
+                                    text = "Sustained Performance Mode",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
+                                )
                             }
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "Locks SoC governor into high performance mode via HyperBoost / GT Mode.",
+                                text = "Locks SoC governor into sustained clock frequencies via Android Window API.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
                             )
@@ -393,91 +423,116 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             onCheckedChange = { vm.updateSustainedPerformance(it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = HyperEmerald,
-                                uncheckedTrackColor = ObsidianSurfaceHighlight
+                                checkedTrackColor = MatrixEmerald,
+                                uncheckedTrackColor = ConsoleHighlight
                             )
                         )
                     }
                 }
             }
 
-            // Section 3: Generation Hyperparameters
-            SettingsCard(
+            // Section 3: Sampling Physics & Hyperparameters
+            WorkstationPanel(
                 icon = Icons.Default.Tune,
-                iconTint = SunsetAmber,
-                title = "Inference Hyperparameters",
-                subtitle = "Fine-tune sampling temperature, context limits, and penalty to control creativity vs precision."
+                iconTint = SolarAmber,
+                title = "Inference Sampling Physics",
+                subtitle = "Fine-tune generation temperature, response limits, and penalty to balance precision vs creative variance."
             ) {
-                // Temperature
-                SliderControl(
+                // Creativity (Temperature)
+                WorkstationSlider(
                     label = "Creativity (Temperature)",
                     valueStr = String.format(java.util.Locale.US, "%.2f", vm.temperature),
                     value = vm.temperature,
                     range = 0.0f..1.5f,
                     steps = 14,
+                    accentColor = SolarAmber,
                     onValueChange = { vm.updateTemperature(it) }
                 )
 
                 // Max Tokens
-                SliderControl(
-                    label = "Max Response Tokens",
-                    valueStr = "${vm.maxTokens} tok",
+                WorkstationSlider(
+                    label = "Max Generation Tokens",
+                    valueStr = "${vm.maxTokens} TOK",
                     value = vm.maxTokens.toFloat(),
                     range = 64f..2048f,
                     steps = 15,
+                    accentColor = PhosphorCyan,
                     onValueChange = { vm.updateMaxTokens(it.toInt()) }
                 )
 
                 // Top-P
-                SliderControl(
+                WorkstationSlider(
                     label = "Nucleus Sampling (Top-P)",
                     valueStr = String.format(java.util.Locale.US, "%.2f", vm.topP),
                     value = vm.topP,
                     range = 0.1f..1.0f,
                     steps = 9,
+                    accentColor = MatrixEmerald,
                     onValueChange = { vm.updateTopP(it) }
                 )
 
                 // Repetition Penalty
-                SliderControl(
+                WorkstationSlider(
                     label = "Repetition Penalty",
                     valueStr = String.format(java.util.Locale.US, "%.2f", vm.repeatPenalty),
                     value = vm.repeatPenalty,
                     range = 1.0f..1.5f,
                     steps = 10,
+                    accentColor = SolarAmber,
                     onValueChange = { vm.updateRepeatPenalty(it) }
                 )
+
+                // Reset to Defaults Button
+                OutlinedButton(
+                    onClick = {
+                        vm.updateTemperature(0.7f)
+                        vm.updateMaxTokens(512)
+                        vm.updateTopP(0.95f)
+                        vm.updateRepeatPenalty(1.05f)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, ConsoleBorderSubtle),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "RESET PARAMETERS TO OPTIMAL DEFAULTS",
+                        style = TelemetryMicroStyle,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
+                    )
+                }
             }
 
-            // Section 4: Device & Engine Diagnostics HUD
-            SettingsCard(
+            // Section 4: Machine Room & Hardware Telemetry HUD
+            WorkstationPanel(
                 icon = Icons.Default.Memory,
-                iconTint = ElectricCyanDim,
-                title = "Device & Engine Diagnostics",
+                iconTint = PhosphorCyanDim,
+                title = "Hardware & Runtime Telemetry HUD",
                 subtitle = "Real-time hardware statistics and on-device execution telemetry."
             ) {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = ObsidianCanvas,
-                    border = BorderStroke(1.dp, ObsidianBorderSubtle),
+                    shape = RoundedCornerShape(10.dp),
+                    color = CarbonCanvas,
+                    border = BorderStroke(1.dp, ConsoleBorderSubtle),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        DiagnosticItem("Device RAM", vm.getDeviceRamInfo(), HyperEmerald)
-                        DiagnosticItem("CPU Topology", "${Runtime.getRuntime().availableProcessors()} Cores (Cortex-A78 + A55)", TextPrimary)
-                        DiagnosticItem(
+                        TelemetryHUDItem("Device Memory", vm.getDeviceRamInfo(), MatrixEmerald)
+                        TelemetryHUDItem("CPU Topology", "${Runtime.getRuntime().availableProcessors()} Cores (big.LITTLE)", TextPrimary)
+                        TelemetryHUDItem(
                             "Inference Pipeline",
-                            if (vm.computeBackend == "GPU") "Vulkan GPU (${vm.gpuLayers} Layers)" else "Arm KleidiAI ukernels",
-                            if (vm.computeBackend == "GPU") ElectricCyan else SunsetAmber
+                            if (vm.computeBackend == "GPU") "Vulkan GPU (${vm.gpuLayers} Layers Offloaded)" else "Arm KleidiAI ukernels",
+                            if (vm.computeBackend == "GPU") MatrixEmerald else SolarAmber
                         )
-                        DiagnosticItem("Context Cache", "Warm Prefix Retention Active", HyperEmerald)
-                        DiagnosticItem("Active Window", "${vm.activeContextTokens} Tokens", TextPrimary)
-                        DiagnosticItem("HyperBoost Engine", if (vm.sustainedPerformanceMode) "Active (High Perf)" else "Standard", HyperEmerald)
-                        DiagnosticItem("Target ABI", Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a", TextSecondary)
-                        DiagnosticItem("Network Boundary", "Air-Gapped (Zero Telemetry)", ElectricCyan)
+                        TelemetryHUDItem("Prefix Cache", "Warm Prefix KV-Cache Active", MatrixEmerald)
+                        TelemetryHUDItem("Active Context", "${vm.activeContextTokens} Tokens Allocated", TextPrimary)
+                        TelemetryHUDItem("SoC Governor", if (vm.sustainedPerformanceMode) "Sustained Peak Boost" else "Dynamic", MatrixEmerald)
+                        TelemetryHUDItem("Target ABI", Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a", TextSecondary)
+                        TelemetryHUDItem("Network Boundary", "Air-Gapped (Zero Telemetry)", PhosphorCyan)
                     }
                 }
             }
@@ -488,7 +543,7 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun SettingsCard(
+private fun WorkstationPanel(
     icon: ImageVector,
     iconTint: Color,
     title: String,
@@ -496,39 +551,44 @@ private fun SettingsCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = ObsidianSurfaceElevated,
-        border = BorderStroke(1.dp, ObsidianBorder),
-        shadowElevation = 3.dp,
+        shape = RoundedCornerShape(14.dp),
+        color = InsetField,
+        border = BorderStroke(1.dp, ConsoleBorder),
+        shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(8.dp),
                     color = iconTint.copy(alpha = 0.15f),
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+                        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
                     }
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
                 }
             }
 
             Text(
-                subtitle,
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
-                lineHeight = 18.sp
+                lineHeight = 17.sp
             )
 
             content()
@@ -536,21 +596,20 @@ private fun SettingsCard(
     }
 }
 
-
-
 @Composable
-private fun SliderControl(
+private fun WorkstationSlider(
     label: String,
     valueStr: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     steps: Int,
+    accentColor: Color,
     onValueChange: (Float) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ObsidianCanvas, RoundedCornerShape(12.dp))
+            .background(CarbonCanvas, RoundedCornerShape(10.dp))
             .padding(12.dp)
     ) {
         Row(
@@ -558,8 +617,17 @@ private fun SliderControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = TextPrimary)
-            Text(valueStr, fontWeight = FontWeight.Bold, color = ElectricCyan, style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextPrimary
+            )
+            Text(
+                text = valueStr,
+                style = TelemetryMetricStyle,
+                fontWeight = FontWeight.Bold,
+                color = accentColor
+            )
         }
         Slider(
             value = value,
@@ -567,35 +635,33 @@ private fun SliderControl(
             valueRange = range,
             steps = steps,
             colors = SliderDefaults.colors(
-                thumbColor = ElectricCyan,
-                activeTrackColor = ElectricCyan,
-                inactiveTrackColor = ObsidianBorder
+                thumbColor = accentColor,
+                activeTrackColor = accentColor,
+                inactiveTrackColor = ConsoleBorder
             )
         )
     }
 }
 
 @Composable
-private fun DiagnosticItem(label: String, value: String, valueTint: Color) {
+private fun TelemetryHUDItem(label: String, value: String, valueTint: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 1.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = TextMuted,
-            fontFamily = FontFamily.Monospace
+            text = label,
+            style = TelemetryMicroStyle,
+            color = TextMuted
         )
         Text(
-            value,
-            style = MaterialTheme.typography.labelSmall,
+            text = value,
+            style = TelemetryMetricStyle.copy(fontSize = 10.sp),
             fontWeight = FontWeight.SemiBold,
-            color = valueTint,
-            fontFamily = FontFamily.Monospace
+            color = valueTint
         )
     }
 }

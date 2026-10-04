@@ -23,48 +23,48 @@ fun DirectorySyncCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = ObsidianSurfaceElevated,
-        border = BorderStroke(1.dp, ObsidianBorder),
-        shadowElevation = 4.dp,
+        shape = RoundedCornerShape(14.dp),
+        color = InsetField,
+        border = BorderStroke(1.dp, ConsoleBorder),
+        shadowElevation = 2.dp,
         modifier = modifier
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Surface(
-                    shape = CircleShape,
-                    color = ElectricCyanContainer,
-                    modifier = Modifier.size(40.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    color = PhosphorCyanContainer,
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.FolderOpen,
                             contentDescription = null,
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(20.dp)
+                            tint = PhosphorCyan,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
 
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "MODELS DIRECTORY",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        text = "NEURAL STORAGE DIRECTORY",
+                        style = TelemetryMicroStyle,
                         fontWeight = FontWeight.Bold,
                         color = TextMuted
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(1.dp))
                     Text(
-                        "/Download/FireLM",
+                        text = "/Download/FireLM",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -72,59 +72,60 @@ fun DirectorySyncCard(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = ObsidianCanvas,
-                    border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                    shape = RoundedCornerShape(4.dp),
+                    color = MatrixEmeraldContainer,
+                    border = BorderStroke(1.dp, MatrixEmerald.copy(alpha = 0.4f))
                 ) {
                     Text(
-                        "Zero-Copy Direct",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = HyperEmerald
+                        text = "ZERO-COPY MMAP",
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = TelemetryMicroStyle.copy(fontSize = 8.5.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MatrixEmerald
                     )
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
-                "Drop .gguf models or subfolders directly into /Download/FireLM via USB, file manager, or browser. FireLM automatically detects and runs them with zero duplicate storage.",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                color = TextMuted,
-                lineHeight = 18.sp
+                text = "Drop any .gguf models or subfolders directly into /Download/FireLM via USB, file manager, or browser. FireLM automatically detects and memory-maps them with zero duplicate storage.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                lineHeight = 17.sp
             )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
 
             Button(
                 onClick = onSyncClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isSyncing,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ElectricCyanContainer,
-                    contentColor = ElectricCyan
+                    containerColor = ConsoleHighlight,
+                    contentColor = PhosphorCyan
                 ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 if (isSyncing) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
-                        color = ElectricCyan
+                        color = PhosphorCyan
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Scanning /Download/FireLM…",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = "SCANNING /Download/FireLM…",
+                        style = TelemetryMetricStyle,
                         fontWeight = FontWeight.Bold
                     )
                 } else {
-                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Sync / Rescan /Download/FireLM",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = "SYNC & RESCAN DIRECTORY",
+                        style = TelemetryMetricStyle,
                         fontWeight = FontWeight.Bold
                     )
                 }

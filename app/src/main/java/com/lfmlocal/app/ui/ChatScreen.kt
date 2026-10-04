@@ -29,7 +29,7 @@ fun ChatScreen(
     }
 
     Scaffold(
-        containerColor = ObsidianCanvas,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             ChatTopBar(
                 vm = vm,

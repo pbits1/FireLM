@@ -26,6 +26,7 @@ object AppPreferences {
     private const val KEY_MAX_TOKENS = "max_tokens"
     private const val KEY_MODELS_FOLDER_URI = "models_folder_uri"
     private const val KEY_MODELS_FOLDER_NAME = "models_folder_name"
+    private const val KEY_THEME_MODE = "theme_mode" // "system", "dark", "light"
 
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -145,5 +146,14 @@ object AppPreferences {
 
     fun getMaxTokens(ctx: Context, default: Int = 512): Int {
         return prefs(ctx).getInt(KEY_MAX_TOKENS, default)
+    }
+
+    // Appearance / Theme
+    fun saveThemeMode(ctx: Context, mode: String) {
+        prefs(ctx).edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun getThemeMode(ctx: Context, default: String = "dark"): String {
+        return prefs(ctx).getString(KEY_THEME_MODE, default) ?: default
     }
 }

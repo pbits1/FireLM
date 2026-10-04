@@ -2,11 +2,11 @@ package com.lfmlocal.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,15 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.lfmlocal.app.ui.ChatScreen
 import com.lfmlocal.app.ui.ChatViewModel
-import com.lfmlocal.app.ui.ModelsScreen
-import com.lfmlocal.app.ui.SettingsScreen
+import com.lfmlocal.app.ui.components.DiagnosticsBottomSheet
+import com.lfmlocal.app.ui.components.ModelsBottomSheet
 import com.lfmlocal.app.ui.theme.LfmTheme
 
 class MainActivity : ComponentActivity() {
     private val vm: ChatViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         try {
@@ -36,55 +35,63 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            val systemInDark = isSystemInDarkTheme()
+            val isDark = when (vm.themeMode) {
+                "light" -> false
+                "dark" -> true
+                else -> systemInDark
+            }
+
+            DisposableEffect(isDark) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (isDark) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                    },
+                    navigationBarStyle = if (isDark) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                    }
+                )
+                onDispose { }
+            }
+
             LaunchedEffect(vm.sustainedPerformanceMode) {
                 try {
                     window.setSustainedPerformanceMode(vm.sustainedPerformanceMode)
                 } catch (_: Throwable) { }
             }
-            LfmTheme {
+            LfmTheme(darkTheme = isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    var route by remember { mutableStateOf("chat") }
+                    var showModelsSheet by remember { mutableStateOf(false) }
+                    var showDiagnosticsSheet by remember { mutableStateOf(false) }
 
-                    BackHandler(enabled = route != "chat") {
-                        route = "chat"
+                    // Immersive Full-Screen Chat
+                    ChatScreen(
+                        vm = vm,
+                        onOpenModels = { showModelsSheet = true },
+                        onOpenSettings = { showDiagnosticsSheet = true }
+                    )
+
+                    // Silky Apple-Style Model Selector Sheet
+                    if (showModelsSheet) {
+                        ModelsBottomSheet(
+                            vm = vm,
+                            onDismiss = { showModelsSheet = false }
+                        )
                     }
 
-                    AnimatedContent(
-                        targetState = route,
-                        transitionSpec = {
-                            if (targetState != "chat") {
-                                (slideInHorizontally { width -> width / 4 } + fadeIn()) togetherWith
-                                (slideOutHorizontally { width -> -width / 4 } + fadeOut())
-                            } else {
-                                (slideInHorizontally { width -> -width / 4 } + fadeIn()) togetherWith
-                                (slideOutHorizontally { width -> width / 4 } + fadeOut())
-                            }
-                        },
-                        label = "screen_route_transition"
-                    ) { targetRoute ->
-                        when (targetRoute) {
-                            "chat" -> ChatScreen(
-                                vm = vm,
-                                onOpenModels = { route = "models" },
-                                onOpenSettings = { route = "settings" }
-                            )
-                            "models" -> ModelsScreen(
-                                vm = vm,
-                                onBack = { route = "chat" }
-                            )
-                            "settings" -> SettingsScreen(
-                                vm = vm,
-                                onBack = { route = "chat" }
-                            )
-                            else -> ChatScreen(
-                                vm = vm,
-                                onOpenModels = { route = "models" },
-                                onOpenSettings = { route = "settings" }
-                            )
-                        }
+                    // Silky Apple-Style Diagnostics & Settings Sheet
+                    if (showDiagnosticsSheet) {
+                        DiagnosticsBottomSheet(
+                            vm = vm,
+                            onDismiss = { showDiagnosticsSheet = false }
+                        )
                     }
                 }
             }

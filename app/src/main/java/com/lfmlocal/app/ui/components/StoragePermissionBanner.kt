@@ -2,7 +2,6 @@ package com.lfmlocal.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderShared
@@ -23,48 +22,48 @@ fun StoragePermissionBanner(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = ObsidianSurfaceElevated,
-        border = BorderStroke(1.5.dp, SunsetAmber),
-        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(14.dp),
+        color = InsetField,
+        border = BorderStroke(1.dp, SolarAmber),
+        shadowElevation = 4.dp,
         modifier = modifier
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Surface(
-                    shape = CircleShape,
-                    color = SunsetAmber.copy(alpha = 0.15f),
-                    modifier = Modifier.size(40.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    color = SolarAmberContainer,
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.Security,
                             contentDescription = null,
-                            tint = SunsetAmber,
-                            modifier = Modifier.size(22.dp)
+                            tint = SolarAmber,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
 
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "STORAGE ACCESS REQUIRED",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        text = "SECURITY PERMISSION REQUIRED",
+                        style = TelemetryMicroStyle,
                         fontWeight = FontWeight.Bold,
-                        color = SunsetAmber
+                        color = SolarAmber
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(1.dp))
                     Text(
-                        "Permission Needed for /Download/FireLM",
+                        text = "Access Needed for /Download/FireLM",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -72,30 +71,34 @@ fun StoragePermissionBanner(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
-                "Android requires 'All files access' permission so FireLM can detect and run your .gguf models from the /Download/FireLM folder with native zero-copy speed.",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                text = "Android requires 'All files access' permission so FireLM can scan and run your .gguf models from the /Download/FireLM folder with native zero-copy speed.",
+                style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
-                lineHeight = 18.sp
+                lineHeight = 17.sp
             )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
 
             Button(
                 onClick = onRequestAccess,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = SunsetAmber,
-                    contentColor = Color.Black
+                    containerColor = SolarAmber,
+                    contentColor = OnSolarAmber
                 ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Icon(Icons.Default.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.FolderShared, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Grant Storage Access in Settings", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "GRANT STORAGE ACCESS IN SETTINGS",
+                    style = TelemetryMetricStyle,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
