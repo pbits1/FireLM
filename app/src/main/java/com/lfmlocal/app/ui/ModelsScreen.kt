@@ -45,6 +45,12 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
         }
     }
 
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let { vm.setCustomModelsFolder(it) }
+    }
+
     Scaffold(
         containerColor = ObsidianCanvas,
         topBar = {
@@ -160,6 +166,122 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = HyperEmerald
                             )
+                        }
+                    }
+                }
+            }
+
+            // Models Storage Directory & Dynamic Sync Card
+            item {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = ObsidianSurfaceElevated,
+                    border = BorderStroke(1.dp, ObsidianBorder),
+                    shadowElevation = 4.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = ElectricCyanContainer,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.FolderOpen,
+                                        contentDescription = null,
+                                        tint = ElectricCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "MODELS DIRECTORY & DYNAMIC SYNC",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextMuted
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    vm.modelsFolderName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = ObsidianCanvas,
+                                border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                            ) {
+                                Text(
+                                    "Zero-Copy SAF",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = HyperEmerald
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Text(
+                            "Store or drop .gguf files or folders directly into this directory via USB or file manager. FireLM indexes and loads them dynamically with zero duplicate storage.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = TextMuted
+                        )
+
+                        Spacer(Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { folderPicker.launch(null) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, ObsidianBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = ElectricCyan
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Choose Folder", style = MaterialTheme.typography.labelMedium)
+                            }
+
+                            Button(
+                                onClick = { vm.refreshCustomModels() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !vm.isSyncingModels,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ElectricCyanContainer,
+                                    contentColor = ElectricCyan
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (vm.isSyncingModels) "Scanning…" else "Sync / Rescan",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }

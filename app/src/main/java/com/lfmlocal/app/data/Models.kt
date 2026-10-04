@@ -15,7 +15,9 @@ data class LfmModel(
     val minRamMb: Int,
     val recommended: Boolean = false,
     val description: String,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val customUriString: String? = null,
+    val customFilePath: String? = null
 ) {
     val url: String get() = if (repo.isNotBlank()) "https://huggingface.co/$repo/resolve/main/$file" else ""
     val localName: String get() = if (isCustom) file else "$id-$file"
@@ -92,15 +94,34 @@ object ModelCatalog {
     fun createCustomModel(file: File): LfmModel {
         val sizeMb = (file.length() / (1024 * 1024)).toInt().coerceAtLeast(1)
         val ramMb = (sizeMb * 1.6).toInt()
+        val cleanName = if (file.name.endsWith(".gguf", ignoreCase = true)) file.name.dropLast(5) else file.name
         return LfmModel(
             id = "custom-${file.name}",
-            label = file.nameWithoutExtension.take(24),
+            label = cleanName.take(28),
             file = file.name,
             sizeMb = sizeMb,
             exactBytes = file.length(),
             minRamMb = ramMb,
-            description = "Custom GGUF imported from local device storage.",
-            isCustom = true
+            description = "Custom GGUF located in ${file.parentFile?.name ?: "storage"}.",
+            isCustom = true,
+            customFilePath = file.absolutePath
+        )
+    }
+
+    fun createCustomModelFromDoc(name: String, sizeBytes: Long, uri: android.net.Uri): LfmModel {
+        val sizeMb = (sizeBytes / (1024 * 1024)).toInt().coerceAtLeast(1)
+        val ramMb = (sizeMb * 1.6).toInt()
+        val cleanName = if (name.endsWith(".gguf", ignoreCase = true)) name.dropLast(5) else name
+        return LfmModel(
+            id = "saf-${name.hashCode()}-$name",
+            label = cleanName.take(28),
+            file = name,
+            sizeMb = sizeMb,
+            exactBytes = sizeBytes,
+            minRamMb = ramMb,
+            description = "Custom GGUF synced from Models folder.",
+            isCustom = true,
+            customUriString = uri.toString()
         )
     }
 }

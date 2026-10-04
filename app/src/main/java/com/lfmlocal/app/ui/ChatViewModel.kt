@@ -3,12 +3,15 @@ package com.lfmlocal.app.ui
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lfmlocal.app.data.AppPreferences
@@ -69,6 +72,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var activeContextTokens by mutableStateOf(AppPreferences.getContextWindowSize(application, 2048))
         private set
+    var modelsFolderName by mutableStateOf(AppPreferences.getCustomModelsFolderName(application, "Download/FireLM"))
+        private set
+    var isSyncingModels by mutableStateOf(false)
+        private set
+    private var activePfd: ParcelFileDescriptor? = null
 
     // Hardware & Inference tuning (Persisted)
     var computeBackend by mutableStateOf(AppPreferences.getComputeBackend(application, "GPU"))
@@ -130,10 +138,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         downloadFraction = null
                         busy = false
                         refreshLocalState()
-                        val f = ModelDownloader.destFile(getApplication(), selectedModel)
-                        if (f.exists() && ModelDownloader.isValidGguf(f)) {
-                            modelFile = f
-                            loadModel(f)
+                        if (ModelDownloader.isDownloaded(getApplication(), selectedModel)) {
+                            loadModelForSelected()
                         }
                     } else if (active.state.error != null) {
                         downloadFraction = null
@@ -161,17 +167,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadCurrentModel() {
-        val f = modelFile ?: run {
-            val dest = if (selectedModel.isCustom) {
-                File(ModelDownloader.modelsDir(getApplication()), selectedModel.file)
-            } else {
-                ModelDownloader.destFile(getApplication(), selectedModel)
-            }
-            if (dest.exists() && ModelDownloader.isValidGguf(dest)) dest else null
-        } ?: return
-        modelFile = f
         if (busy || handle != 0L) return
-        loadModel(f)
+        if (ModelDownloader.isDownloaded(getApplication(), selectedModel)) {
+            loadModelForSelected()
+        }
     }
 
     fun ejectModel() {
@@ -205,6 +204,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppPreferences.saveSustainedPerformance(getApplication(), enabled)
     }
 
+    fun setCustomModelsFolder(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ctx = getApplication<Application>()
+            try {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                ctx.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Throwable) { }
+
+            val doc = DocumentFile.fromTreeUri(ctx, uri)
+            val folderName = doc?.name ?: "Selected Folder"
+            AppPreferences.saveCustomModelsFolderUri(ctx, uri.toString())
+            AppPreferences.saveCustomModelsFolderName(ctx, folderName)
+
+            withContext(Dispatchers.Main) {
+                modelsFolderName = folderName
+                status = "Models folder set to '$folderName'. Scanning for .gguf models…"
+                refreshCustomModels()
+            }
+        }
+    }
+
     fun selectModel(m: LfmModel) {
         if (selectedModel.id == m.id && handle != 0L) return
         AppPreferences.saveSelectedModelId(getApplication(), m.id)
@@ -213,15 +233,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         selectedModel = m
         modelFile = null
 
-        val f = if (m.isCustom) {
-            File(ModelDownloader.modelsDir(getApplication()), m.file)
-        } else {
-            ModelDownloader.destFile(getApplication(), m)
-        }
-
-        if (f.exists() && ModelDownloader.isValidGguf(f)) {
-            modelFile = f
-            loadModel(f)
+        if (ModelDownloader.isDownloaded(getApplication(), m)) {
+            loadModelForSelected()
         } else {
             status = "Selected ${m.label}. Tap Download to save locally."
         }
@@ -229,39 +242,81 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshLocalState() {
         refreshCustomModels()
+        val ctx = getApplication<Application>()
         val downloaded = ModelCatalog.models.filter {
-            ModelDownloader.isDownloaded(getApplication(), it)
+            ModelDownloader.isDownloaded(ctx, it)
         }.map { it.id }.toSet()
         downloadedModelIds = downloaded
 
-        val f = if (selectedModel.isCustom) {
-            File(ModelDownloader.modelsDir(getApplication()), selectedModel.file)
-        } else {
-            ModelDownloader.destFile(getApplication(), selectedModel)
-        }
-
-        if (f.exists() && ModelDownloader.isValidGguf(f)) {
-            if (modelFile?.absolutePath != f.absolutePath) {
-                modelFile = f
-                if (handle == 0L) loadModel(f)
+        if (ModelDownloader.isDownloaded(ctx, selectedModel)) {
+            if (modelFile == null && selectedModel.customFilePath != null) {
+                modelFile = File(selectedModel.customFilePath!!)
+            } else if (modelFile == null) {
+                modelFile = ModelDownloader.destFile(ctx, selectedModel)
+            }
+            if (handle == 0L && !busy) {
+                loadModelForSelected()
             }
         }
     }
 
     fun refreshCustomModels() {
         viewModelScope.launch(Dispatchers.IO) {
-            val dir = ModelDownloader.modelsDir(getApplication())
-            val customFiles = dir.listFiles { file ->
-                file.isFile && file.extension.equals("gguf", ignoreCase = true) &&
-                    ModelCatalog.models.none { it.localName == file.name }
-            } ?: emptyArray()
+            val ctx = getApplication<Application>()
+            withContext(Dispatchers.Main) { isSyncingModels = true }
 
-            val list = customFiles.map { ModelCatalog.createCustomModel(it) }
+            val detectedList = mutableListOf<LfmModel>()
+            val seenKeys = mutableSetOf<String>()
+
+            // 1. Scan user's SAF tree folder if configured
+            val treeUriStr = AppPreferences.getCustomModelsFolderUri(ctx)
+            if (treeUriStr != null) {
+                try {
+                    val treeUri = Uri.parse(treeUriStr)
+                    val treeDoc = DocumentFile.fromTreeUri(ctx, treeUri)
+                    if (treeDoc != null && treeDoc.exists()) {
+                        treeDoc.listFiles().forEach { doc ->
+                            if (doc.isFile && (doc.name?.endsWith(".gguf", ignoreCase = true) == true)) {
+                                val name = doc.name ?: "model.gguf"
+                                val key = name.lowercase()
+                                if (!seenKeys.contains(key) && ModelCatalog.models.none { it.localName.equals(name, ignoreCase = true) }) {
+                                    if (ModelDownloader.isValidGguf(ctx, doc.uri)) {
+                                        detectedList.add(ModelCatalog.createCustomModelFromDoc(name, doc.length(), doc.uri))
+                                        seenKeys.add(key)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Throwable) { }
+            }
+
+            // 2. Scan physical directories (Download/FireLM, external app storage, internal storage)
+            for (dir in ModelDownloader.allSearchDirs(ctx)) {
+                try {
+                    if (dir.exists() && dir.isDirectory) {
+                        val files = dir.listFiles { f ->
+                            f.isFile && f.extension.equals("gguf", ignoreCase = true) &&
+                                ModelCatalog.models.none { it.localName.equals(f.name, ignoreCase = true) }
+                        } ?: emptyArray()
+
+                        for (f in files) {
+                            val key = f.name.lowercase()
+                            if (!seenKeys.contains(key) && ModelDownloader.isValidGguf(f)) {
+                                detectedList.add(ModelCatalog.createCustomModel(f))
+                                seenKeys.add(key)
+                            }
+                        }
+                    }
+                } catch (_: Throwable) { }
+            }
+
             withContext(Dispatchers.Main) {
-                customModels = list
-                val savedId = AppPreferences.getSelectedModelId(getApplication())
+                customModels = detectedList
+                isSyncingModels = false
+                val savedId = AppPreferences.getSelectedModelId(ctx)
                 if (savedId != null && selectedModel.id != savedId) {
-                    val customMatch = list.find { it.id == savedId }
+                    val customMatch = detectedList.find { it.id == savedId }
                     if (customMatch != null) {
                         selectModel(customMatch)
                     }
@@ -320,7 +375,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 result.onSuccess { file ->
                     refreshLocalState()
                     modelFile = file
-                    loadModel(file)
+                    loadModelForSelected()
                     status = "Ready — ${model.label} · 100% offline"
                 }.onFailure { err ->
                     status = "Download error: ${err.message}"
@@ -343,18 +398,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importCustomGguf(uri: Uri, displayName: String) {
         if (busy) return
-        busy = true
-        status = "Importing $displayName…"
-        viewModelScope.launch {
-            val result = ModelDownloader.importUri(getApplication(), uri, displayName)
-            busy = false
-            result.onSuccess { importedFile ->
-                refreshCustomModels()
-                val custom = ModelCatalog.createCustomModel(importedFile)
-                selectModel(custom)
-                status = "Imported ${importedFile.name}. Ready to load."
-            }.onFailure { err ->
-                status = "Failed to import: ${err.message}"
+        status = "Registering $displayName…"
+        viewModelScope.launch(Dispatchers.IO) {
+            val ctx = getApplication<Application>()
+            if (ModelDownloader.isValidGguf(ctx, uri)) {
+                try {
+                    val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    ctx.contentResolver.takePersistableUriPermission(uri, takeFlags)
+                } catch (_: Throwable) { }
+
+                val pfd = try { ctx.contentResolver.openFileDescriptor(uri, "r") } catch (_: Throwable) { null }
+                val sizeBytes = pfd?.statSize ?: 0L
+                try { pfd?.close() } catch (_: Throwable) { }
+
+                val custom = ModelCatalog.createCustomModelFromDoc(displayName, sizeBytes, uri)
+                withContext(Dispatchers.Main) {
+                    refreshCustomModels()
+                    selectModel(custom)
+                    status = "Imported $displayName (zero-copy). Ready to load."
+                }
+            } else {
+                // Fallback to local copy if direct stream validation fails
+                val result = ModelDownloader.importUri(ctx, uri, displayName)
+                withContext(Dispatchers.Main) {
+                    result.onSuccess { importedFile ->
+                        refreshCustomModels()
+                        val custom = ModelCatalog.createCustomModel(importedFile)
+                        selectModel(custom)
+                        status = "Imported ${importedFile.name}. Ready to load."
+                    }.onFailure { err ->
+                        status = "Failed to import: ${err.message}"
+                    }
+                }
             }
         }
     }
@@ -392,22 +467,64 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun reloadModelWithNewSettings() {
-        val f = modelFile ?: return
         if (busy) return
         stop()
         freeModel()
-        loadModel(f)
+        loadModelForSelected()
     }
 
-    private fun loadModel(f: File) {
+    private fun loadModelForSelected() {
+        val m = selectedModel
         if (busy) return
         busy = true
         val requestedGpu = if (computeBackend == "GPU") (if (gpuLayers > 0) gpuLayers else 32) else 0
-        status = if (requestedGpu > 0) "Loading ${f.name} (GPU default with CPU fallback)…" else "Loading ${f.name} into memory (CPU)…"
+        status = if (requestedGpu > 0) "Loading ${m.label} (GPU default with CPU fallback)…" else "Loading ${m.label} into memory (CPU)…"
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 try { LlamaBridge.nativeInit() } catch (_: Throwable) { }
-                val h = LlamaBridge.nativeLoadModel(f.absolutePath, contextWindowSize, cpuThreads, requestedGpu)
+
+                try {
+                    activePfd?.close()
+                    activePfd = null
+                } catch (_: Throwable) { }
+
+                val ctx = getApplication<Application>()
+                val modelPath: String? = when {
+                    m.customUriString != null -> {
+                        try {
+                            val uri = Uri.parse(m.customUriString)
+                            val pfd = ctx.contentResolver.openFileDescriptor(uri, "r")
+                            activePfd = pfd
+                            if (pfd != null) "/proc/self/fd/${pfd.fd}" else null
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    }
+                    m.customFilePath != null -> {
+                        val f = File(m.customFilePath)
+                        if (f.exists()) f.absolutePath else null
+                    }
+                    else -> {
+                        val f = ModelDownloader.destFile(ctx, m)
+                        if (f.exists()) f.absolutePath else null
+                    }
+                }
+
+                if (modelPath == null) {
+                    withContext(Dispatchers.Main) {
+                        busy = false
+                        status = "Model file not found. Please sync or download again."
+                    }
+                    return@withContext
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (modelFile == null) {
+                        modelFile = File(m.file)
+                    }
+                }
+
+                val h = LlamaBridge.nativeLoadModel(modelPath, contextWindowSize, cpuThreads, requestedGpu)
                 withContext(Dispatchers.Main) {
                     busy = false
                     if (h != 0L) {
@@ -449,6 +566,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun loadModel(f: File) {
+        modelFile = f
+        loadModelForSelected()
     }
 
     fun send(userText: String) {
@@ -543,12 +665,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         freeModel()
         val ctx = getApplication<Application>()
         try {
-            val target = if (model.isCustom) {
-                File(ModelDownloader.modelsDir(ctx), model.file)
+            if (model.customUriString != null) {
+                val uri = Uri.parse(model.customUriString)
+                DocumentFile.fromSingleUri(ctx, uri)?.delete()
+            } else if (model.customFilePath != null) {
+                File(model.customFilePath).delete()
             } else {
-                ModelDownloader.destFile(ctx, model)
+                val target = ModelDownloader.destFile(ctx, model)
+                if (target.exists()) target.delete()
             }
-            if (target.exists()) target.delete()
         } catch (_: Throwable) { }
         modelFile = null
         refreshLocalState()
@@ -561,7 +686,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (h != 0L) {
             viewModelScope.launch(Dispatchers.IO) {
                 try { LlamaBridge.nativeFreeModel(h) } catch (_: Throwable) { }
+                try {
+                    activePfd?.close()
+                    activePfd = null
+                } catch (_: Throwable) { }
             }
+        } else {
+            try {
+                activePfd?.close()
+                activePfd = null
+            } catch (_: Throwable) { }
         }
     }
 

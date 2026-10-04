@@ -24,9 +24,28 @@ object AppPreferences {
     private const val KEY_TOP_P = "top_p"
     private const val KEY_REPEAT_PENALTY = "repeat_penalty"
     private const val KEY_MAX_TOKENS = "max_tokens"
+    private const val KEY_MODELS_FOLDER_URI = "models_folder_uri"
+    private const val KEY_MODELS_FOLDER_NAME = "models_folder_name"
 
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // Models Storage Directory & SAF Tree
+    fun saveCustomModelsFolderUri(ctx: Context, uri: String?) {
+        prefs(ctx).edit().putString(KEY_MODELS_FOLDER_URI, uri).apply()
+    }
+
+    fun getCustomModelsFolderUri(ctx: Context): String? {
+        return prefs(ctx).getString(KEY_MODELS_FOLDER_URI, null)
+    }
+
+    fun saveCustomModelsFolderName(ctx: Context, name: String?) {
+        prefs(ctx).edit().putString(KEY_MODELS_FOLDER_NAME, name).apply()
+    }
+
+    fun getCustomModelsFolderName(ctx: Context, default: String = "Download/FireLM"): String {
+        return prefs(ctx).getString(KEY_MODELS_FOLDER_NAME, default) ?: default
+    }
 
     // Model selection
     fun saveSelectedModelId(ctx: Context, modelId: String) {

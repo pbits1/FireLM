@@ -2,6 +2,7 @@ package com.lfmlocal.app.download
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import com.lfmlocal.app.data.LfmModel
 import java.io.File
 import java.io.FileOutputStream
@@ -28,8 +29,49 @@ data class DownloadState(
 
 /** Resumable HF downloader with storage safety, progress, and import support. */
 object ModelDownloader {
-    fun modelsDir(ctx: Context): File = File(ctx.filesDir, "models").apply { mkdirs() }
-    fun destFile(ctx: Context, model: LfmModel): File = File(modelsDir(ctx), model.localName)
+    fun getPublicDownloadsFireLMDir(): File {
+        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        return File(publicDownloads, "FireLM")
+    }
+
+    fun modelsDir(ctx: Context): File {
+        // 1. Try public Download/FireLM
+        val pub = getPublicDownloadsFireLMDir()
+        try {
+            if (pub.exists() && pub.canWrite()) return pub
+            if (pub.mkdirs() && pub.canWrite()) return pub
+        } catch (_: Throwable) { }
+
+        // 2. Try app external files dir (Android/data/com.lfmlocal.app/files/models)
+        try {
+            val ext = ctx.getExternalFilesDir("models")
+            if (ext != null && (ext.exists() || ext.mkdirs()) && ext.canWrite()) {
+                return ext
+            }
+        } catch (_: Throwable) { }
+
+        // 3. Fallback to private internal filesDir/models
+        return File(ctx.filesDir, "models").apply { mkdirs() }
+    }
+
+    fun allSearchDirs(ctx: Context): List<File> {
+        val dirs = LinkedHashSet<File>()
+        val pub = getPublicDownloadsFireLMDir()
+        if (pub.exists()) dirs.add(pub)
+        ctx.getExternalFilesDir("models")?.let { if (it.exists()) dirs.add(it) }
+        val internal = File(ctx.filesDir, "models")
+        if (internal.exists()) dirs.add(internal)
+        return dirs.toList()
+    }
+
+    fun destFile(ctx: Context, model: LfmModel): File {
+        // If it already exists in any of our search dirs, use that
+        for (dir in allSearchDirs(ctx)) {
+            val candidate = File(dir, model.localName)
+            if (candidate.exists()) return candidate
+        }
+        return File(modelsDir(ctx), model.localName)
+    }
 
     /**
      * Checks if a file has the valid 4-byte GGUF magic header (0x47, 0x47, 0x55, 0x46 / "GGUF").
@@ -52,16 +94,49 @@ object ModelDownloader {
         }
     }
 
-    fun isDownloaded(ctx: Context, model: LfmModel): Boolean {
-        val f = destFile(ctx, model)
-        if (!f.exists() || !isValidGguf(f)) return false
-
-        return if (model.exactBytes > 0L) {
-            val len = f.length()
-            len == model.exactBytes || abs(len - model.exactBytes) <= 4096L || (len >= model.exactBytes * 0.99 && len <= model.exactBytes * 1.01)
-        } else {
-            f.length() > (model.sizeMb * 1024L * 1024L * 0.9)
+    /**
+     * Checks if a content Uri has the valid 4-byte GGUF magic header without reading the full file.
+     */
+    fun isValidGguf(ctx: Context, uri: Uri): Boolean {
+        return try {
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                val header = ByteArray(4)
+                val read = input.read(header)
+                read == 4 &&
+                    header[0] == 0x47.toByte() && // 'G'
+                    header[1] == 0x47.toByte() && // 'G'
+                    header[2] == 0x55.toByte() && // 'U'
+                    header[3] == 0x46.toByte()    // 'F'
+            } ?: false
+        } catch (_: Throwable) {
+            false
         }
+    }
+
+    fun isDownloaded(ctx: Context, model: LfmModel): Boolean {
+        if (model.customFilePath != null) {
+            val f = File(model.customFilePath)
+            return f.exists() && isValidGguf(f)
+        }
+        if (model.customUriString != null) {
+            val uri = Uri.parse(model.customUriString)
+            return isValidGguf(ctx, uri)
+        }
+
+        // For catalog models, search across all directories
+        for (dir in allSearchDirs(ctx)) {
+            val f = File(dir, model.localName)
+            if (f.exists() && isValidGguf(f)) {
+                return if (model.exactBytes > 0L) {
+                    val len = f.length()
+                    len == model.exactBytes || abs(len - model.exactBytes) <= 4096L || (len >= model.exactBytes * 0.99 && len <= model.exactBytes * 1.01)
+                } else {
+                    f.length() > (model.sizeMb * 1024L * 1024L * 0.9)
+                }
+            }
+        }
+
+        return false
     }
 
     fun getAvailableStorageMb(ctx: Context): Long {
