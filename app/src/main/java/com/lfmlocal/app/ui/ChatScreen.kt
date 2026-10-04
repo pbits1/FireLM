@@ -84,7 +84,7 @@ fun ChatScreen(
                     item(key = "streaming") {
                         StreamingBubble(text = vm.streamingText, backend = vm.computeBackend)
                     }
-                } else if (vm.busy) {
+                } else if (vm.isGenerating) {
                     item(key = "thinking") {
                         ThinkingIndicator(backend = vm.computeBackend)
                     }

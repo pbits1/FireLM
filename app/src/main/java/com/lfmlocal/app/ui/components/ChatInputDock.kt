@@ -38,6 +38,7 @@ fun ChatInputDock(
 ) {
     val focusManager = LocalFocusManager.current
     val hasText = input.isNotBlank()
+    val canSend = hasText && vm.isModelLoaded && !vm.busy
 
     Column(
         modifier = modifier
@@ -46,6 +47,39 @@ fun ChatInputDock(
             .imePadding()
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
+        // Subtle download progress strip when download is active in the background
+        if (vm.isDownloading) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Downloading ${vm.selectedModel.label.substringBefore(" ·")}…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+                Text(
+                    text = "${((vm.downloadFraction ?: 0f) * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+            LinearProgressIndicator(
+                progress = { vm.downloadFraction ?: 0f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(1.5.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.outlineVariant
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+
         // Floating Rounded Capsule (Apple / ChatGPT style)
         Surface(
             shape = RoundedCornerShape(26.dp),
@@ -59,18 +93,28 @@ fun ChatInputDock(
                     .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val placeholderText = when {
+                    vm.isDownloading -> {
+                        val pct = ((vm.downloadFraction ?: 0f) * 100).toInt()
+                        "Downloading model ($pct%)…"
+                    }
+                    vm.isLoadingModel -> "Loading model into memory…"
+                    !vm.isModelLoaded -> "Select or download a model to chat…"
+                    else -> "Message FireLM…"
+                }
+
                 TextField(
                     value = input,
                     onValueChange = onInputChange,
                     modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
-                            text = if (vm.isModelLoading) "Loading model into memory…" else "Message FireLM…",
+                            text = placeholderText,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.tertiary
                         )
                     },
-                    enabled = !vm.busy,
+                    enabled = !vm.busy && vm.isModelLoaded,
                     maxLines = 5,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -80,14 +124,15 @@ fun ChatInputDock(
                         unfocusedIndicatorColor = Color.Transparent,
                         disabledIndicatorColor = Color.Transparent,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledTextColor = MaterialTheme.colorScheme.tertiary
                     ),
                     keyboardOptions = KeyboardOptions.Default.copy(
                         imeAction = ImeAction.Send
                     ),
                     keyboardActions = KeyboardActions(
                         onSend = {
-                            if (hasText && !vm.busy) {
+                            if (canSend) {
                                 onSend(input)
                                 focusManager.clearFocus()
                             }
@@ -101,26 +146,27 @@ fun ChatInputDock(
                 Surface(
                     shape = CircleShape,
                     color = when {
-                        vm.busy || hasText -> MaterialTheme.colorScheme.primary
+                        vm.isGenerating -> MaterialTheme.colorScheme.primary
+                        canSend -> MaterialTheme.colorScheme.primary
                         else -> MaterialTheme.colorScheme.surfaceContainerHighest
                     },
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .clickable(
-                            enabled = vm.busy || hasText
+                            enabled = vm.isGenerating || canSend
                         ) {
-                            if (vm.busy) {
+                            if (vm.isGenerating) {
                                 onStop()
-                            } else if (hasText) {
+                            } else if (canSend) {
                                 onSend(input)
                                 focusManager.clearFocus()
                             }
                         }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        AnimatedContent(targetState = vm.busy, label = "send_stop_apple") { isBusy ->
-                            if (isBusy) {
+                        AnimatedContent(targetState = vm.isGenerating, label = "send_stop_apple") { isGen ->
+                            if (isGen) {
                                 Icon(
                                     Icons.Default.Stop,
                                     contentDescription = "Stop",
@@ -131,7 +177,7 @@ fun ChatInputDock(
                                 Icon(
                                     Icons.Default.ArrowUpward,
                                     contentDescription = "Send",
-                                    tint = if (hasText) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.tertiary,
+                                    tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }

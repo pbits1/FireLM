@@ -49,7 +49,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var streamingText by mutableStateOf("")
         private set
-    var busy by mutableStateOf(false)
+    var isGenerating by mutableStateOf(false)
+        private set
+    var isLoadingModel by mutableStateOf(false)
+        private set
+    var downloadFraction by mutableStateOf<Float?>(null)
         private set
     var status by mutableStateOf("Ready to chat offline.")
         private set
@@ -60,8 +64,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     )
         private set
     var modelFile: File? by mutableStateOf(null)
-        private set
-    var downloadFraction by mutableStateOf<Float?>(null)
         private set
     var customModels by mutableStateOf(listOf<LfmModel>())
         private set
@@ -113,8 +115,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var themeMode by mutableStateOf(AppPreferences.getThemeMode(application, "dark"))
         private set
 
+    val isDownloading: Boolean get() = downloadFraction != null
     val isModelLoaded: Boolean get() = inferenceCoordinator.isLoaded
-    val isModelLoading: Boolean get() = busy && downloadFraction == null && !inferenceCoordinator.isLoaded
+    val isModelLoading: Boolean get() = isLoadingModel
+    val busy: Boolean get() = isGenerating || isLoadingModel || isDownloading
 
     init {
         messages = ChatHistoryStorage.loadMessages(application)
@@ -132,17 +136,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         downloadFraction = active.state.fraction
                         val pct = (active.state.fraction * 100).toInt()
                         status = "Downloading ${active.modelLabel} ($pct%)…"
-                        busy = true
                     } else if (active.state.done) {
                         downloadFraction = null
-                        busy = false
                         refreshLocalState()
                         if (GgufScanner.isDownloaded(getApplication(), selectedModel)) {
                             loadModelForSelected()
                         }
                     } else if (active.state.error != null) {
                         downloadFraction = null
-                        busy = false
                         status = "Download error: ${active.state.error}"
                     }
                 }
@@ -288,7 +289,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         } catch (_: Exception) {}
 
-        busy = true
         downloadFraction = 0f
         status = "Downloading ${model.label}…"
 
@@ -312,7 +312,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (vmWakeLock?.isHeld == true) vmWakeLock?.release()
                 } catch (_: Exception) {}
-                busy = false
                 downloadFraction = null
 
                 result.onSuccess { file ->
@@ -335,7 +334,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {}
         ModelDownloadService.cancelDownload(getApplication())
         downloadFraction = null
-        busy = false
         status = "Download cancelled."
     }
 
@@ -418,7 +416,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadModelForSelected() {
         val m = selectedModel
         if (busy) return
-        busy = true
+        isLoadingModel = true
         val requestedGpu = if (computeBackend == "GPU") (if (gpuLayers > 0) gpuLayers else 32) else 0
         status = if (requestedGpu > 0) "Loading ${m.label} (GPU default with CPU fallback)…" else "Loading ${m.label} into memory (CPU)…"
 
@@ -435,7 +433,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (modelPath == null) {
-                busy = false
+                isLoadingModel = false
                 status = "Model file not found. Please sync or download again."
                 return@launch
             }
@@ -451,7 +449,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 requestedGpuLayers = requestedGpu
             )
 
-            busy = false
+            isLoadingModel = false
             if (loadResult.isSuccess) {
                 activeContextTokens = loadResult.contextSize
                 val actualGpu = loadResult.actualGpuLayers
@@ -495,7 +493,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messages = messages + ChatMsg(role = "user", text = text)
         ChatHistoryStorage.saveMessages(getApplication(), messages)
         streamingText = ""
-        busy = true
+        isGenerating = true
         status = "Thinking on-device…"
 
         val activeSystemPrompt = if (systemPromptEnabled && systemPrompt.isNotBlank()) systemPrompt.trim() else ""
@@ -527,7 +525,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 String.format(Locale.US, "%.1f tok/s", tokPerSec)
             } else null
 
-            if (busy) {
+            if (isGenerating) {
                 messages = messages + ChatMsg(
                     role = "assistant",
                     text = final.ifEmpty { "(no response)" },
@@ -537,14 +535,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 status = "Ready — 100% offline"
             }
             streamingText = ""
-            busy = false
+            isGenerating = false
         }
     }
 
     fun stop() {
         genJob?.cancel()
         inferenceCoordinator.requestStop()
-        busy = false
+        isGenerating = false
         if (streamingText.isNotBlank()) {
             messages = messages + ChatMsg(role = "assistant", text = streamingText.trim() + " (stopped)")
             ChatHistoryStorage.saveMessages(getApplication(), messages)
