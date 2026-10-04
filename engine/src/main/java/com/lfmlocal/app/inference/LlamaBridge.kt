@@ -32,7 +32,78 @@ object LlamaBridge {
         callback: TokenCallback?
     ): String
 
-    /** LFM2 chat template:
+    /** Multi-family prompt builder with native chat templates */
+    fun buildPrompt(
+        family: String = "",
+        modelFileName: String = "",
+        system: String,
+        history: List<Pair<String, String>>,
+        user: String
+    ): String {
+        return when {
+            family.equals("Meta", ignoreCase = true) || modelFileName.contains("llama-3", ignoreCase = true) -> {
+                buildLlama3Prompt(system, history, user)
+            }
+            family.equals("Google", ignoreCase = true) || modelFileName.contains("gemma", ignoreCase = true) -> {
+                buildGemmaPrompt(system, history, user)
+            }
+            else -> {
+                buildLfmPrompt(system, history, user)
+            }
+        }
+    }
+
+    /** Meta Llama 3 / 3.2 chat template */
+    fun buildLlama3Prompt(system: String, history: List<Pair<String, String>>, user: String): String {
+        val sb = StringBuilder()
+        sb.append("<|begin_of_text|>")
+        if (system.isNotBlank()) {
+            sb.append("<|start_header_id|>system<|end_header_id|>\n\n")
+                .append(system.trim())
+                .append("<|eot_id|>")
+        }
+        for ((role, text) in history) {
+            val r = if (role == "assistant") "assistant" else "user"
+            sb.append("<|start_header_id|>").append(r).append("<|end_header_id|>\n\n")
+                .append(sanitize(text.trim()))
+                .append("<|eot_id|>")
+        }
+        sb.append("<|start_header_id|>user<|end_header_id|>\n\n")
+            .append(sanitize(user.trim()))
+            .append("<|eot_id|>")
+        sb.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
+        return sb.toString()
+    }
+
+    /** Google Gemma 2 chat template */
+    fun buildGemmaPrompt(system: String, history: List<Pair<String, String>>, user: String): String {
+        val sb = StringBuilder()
+        sb.append("<bos>")
+        val effectiveSystem = if (system.isNotBlank()) "${system.trim()}\n\n" else ""
+        if (history.isEmpty()) {
+            sb.append("<start_of_turn>user\n")
+                .append(effectiveSystem)
+                .append(sanitize(user.trim()))
+                .append("<end_of_turn>\n<start_of_turn>model\n")
+        } else {
+            var isFirstUser = true
+            for ((role, text) in history) {
+                val r = if (role == "assistant") "model" else "user"
+                sb.append("<start_of_turn>").append(r).append("\n")
+                if (r == "user" && isFirstUser) {
+                    sb.append(effectiveSystem)
+                    isFirstUser = false
+                }
+                sb.append(sanitize(text.trim())).append("<end_of_turn>\n")
+            }
+            sb.append("<start_of_turn>user\n")
+            if (isFirstUser) sb.append(effectiveSystem)
+            sb.append(sanitize(user.trim())).append("<end_of_turn>\n<start_of_turn>model\n")
+        }
+        return sb.toString()
+    }
+
+    /** ChatML template (Qwen 2.5, DeepSeek R1, SmolLM2, Liquid AI LFM2):
      *  <|startoftext|><|im_start|>system\n...<|im_end|>\n<|im_start|>user\n... etc.
      */
     fun buildLfmPrompt(system: String, history: List<Pair<String, String>>, user: String): String {
@@ -55,6 +126,13 @@ object LlamaBridge {
         input.replace("<|im_start|>", "")
             .replace("<|im_end|>", "")
             .replace("<|startoftext|>", "")
+            .replace("<|begin_of_text|>", "")
+            .replace("<|start_header_id|>", "")
+            .replace("<|end_header_id|>", "")
+            .replace("<|eot_id|>", "")
+            .replace("<start_of_turn>", "")
+            .replace("<end_of_turn>", "")
+            .replace("<bos>", "")
 
     suspend fun generateStreaming(
         handle: Long,

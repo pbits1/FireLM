@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Eject
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -184,31 +186,64 @@ fun ModelsBottomSheet(
                     }
                 }
 
-                // Official Catalog Models
-                item {
-                    Text(
-                        text = "ON-DEVICE MODELS",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
+                // Open-Weight Community Models (Meta, Alibaba, DeepSeek, Google, Hugging Face)
+                val openModels = ModelCatalog.models.filter { it.family != "Liquid AI" }
+                if (openModels.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "OPEN-WEIGHT & REASONING MODELS",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    items(openModels, key = { it.id }) { model ->
+                        ModelRowItem(
+                            model = model,
+                            vm = vm,
+                            onSelect = {
+                                if (vm.isModelDownloaded(model)) {
+                                    vm.selectModel(model)
+                                    onDismiss()
+                                } else {
+                                    vm.selectModel(model)
+                                    vm.startDownload()
+                                }
+                            }
+                        )
+                    }
                 }
 
-                items(ModelCatalog.models, key = { it.id }) { model ->
-                    ModelRowItem(
-                        model = model,
-                        vm = vm,
-                        onSelect = {
-                            if (vm.isModelDownloaded(model)) {
-                                vm.selectModel(model)
-                                onDismiss()
-                            } else {
-                                vm.selectModel(model)
-                                vm.startDownload()
+                // Liquid AI LFM2 Models
+                val lfmModels = ModelCatalog.models.filter { it.family == "Liquid AI" }
+                if (lfmModels.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "LIQUID AI LFM2 MODELS",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    items(lfmModels, key = { it.id }) { model ->
+                        ModelRowItem(
+                            model = model,
+                            vm = vm,
+                            onSelect = {
+                                if (vm.isModelDownloaded(model)) {
+                                    vm.selectModel(model)
+                                    onDismiss()
+                                } else {
+                                    vm.selectModel(model)
+                                    vm.startDownload()
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 item {
@@ -248,22 +283,37 @@ private fun ModelRowItem(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = model.label,
+                        text = model.label.substringBefore(" ·"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    if (model.recommended) {
-                        Spacer(Modifier.width(8.dp))
+                    if (model.family.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Text(
+                                text = model.family,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+
+                    if (model.recommended) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = "Default",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                             )
                         }
@@ -272,8 +322,10 @@ private fun ModelRowItem(
 
                 Spacer(Modifier.height(2.dp))
 
+                val subtitle = model.label.substringAfter(" ·", "")
+                val descText = if (subtitle.isNotBlank()) "${model.sizeMb} MB · $subtitle" else "${model.sizeMb} MB · ${model.description}"
                 Text(
-                    text = "${model.sizeMb} MB · ${model.description}",
+                    text = descText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary,
                     maxLines = 1
@@ -293,35 +345,102 @@ private fun ModelRowItem(
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
             when {
                 isSelected -> {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = "Active",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(15.dp)
-                            )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (vm.isModelLoaded) {
+                            Surface(
+                                onClick = { vm.ejectModel() },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Eject,
+                                        contentDescription = "Eject from RAM",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Eject",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        } else if (isDownloaded) {
+                            Surface(
+                                onClick = { vm.loadCurrentModel() },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.PowerSettingsNew,
+                                        contentDescription = "Load into RAM",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Load",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 }
                 isDownloaded -> {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.tertiary)
-                    )
+                    Surface(
+                        onClick = onSelect,
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Text(
+                            text = "Select",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
                 }
                 else -> {
                     Surface(
+                        onClick = onSelect,
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)

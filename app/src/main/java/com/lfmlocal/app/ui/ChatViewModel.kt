@@ -172,6 +172,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppPreferences.saveSystemPromptEnabled(getApplication(), enabled)
     }
 
+    private var userEjectedModel = false
+
     fun updateThemeMode(mode: String) {
         themeMode = mode
         AppPreferences.saveThemeMode(getApplication(), mode)
@@ -179,14 +181,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadCurrentModel() {
         if (busy || isModelLoaded) return
+        userEjectedModel = false
         if (GgufScanner.isDownloaded(getApplication(), selectedModel)) {
             loadModelForSelected()
         }
     }
 
     fun ejectModel() {
+        userEjectedModel = true
         if (busy) stop()
         freeModel()
+        modelFile = null
         status = "Model ejected from RAM. Ready to load."
     }
 
@@ -217,6 +222,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectModel(m: LfmModel) {
         if (selectedModel.id == m.id && isModelLoaded) return
+        userEjectedModel = false
         AppPreferences.saveSelectedModelId(getApplication(), m.id)
         stop()
         freeModel()
@@ -242,7 +248,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } else if (modelFile == null) {
                 modelFile = GgufScanner.destFile(ctx, selectedModel)
             }
-            if (!isModelLoaded && !busy) {
+            if (!isModelLoaded && !busy && !userEjectedModel) {
                 loadModelForSelected()
             }
         }
@@ -413,97 +419,120 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         loadModelForSelected()
     }
 
-    private fun loadModelForSelected() {
+    private suspend fun loadModelForSelectedSuspend(): Boolean {
         val m = selectedModel
-        if (busy) return
+        if (isModelLoaded) return true
         isLoadingModel = true
         val requestedGpu = if (computeBackend == "GPU") (if (gpuLayers > 0) gpuLayers else 32) else 0
         status = if (requestedGpu > 0) "Loading ${m.label} (GPU default with CPU fallback)…" else "Loading ${m.label} into memory (CPU)…"
 
-        viewModelScope.launch {
-            val modelPath = withContext(Dispatchers.IO) {
-                try {
-                    activePfd?.close()
-                    activePfd = null
-                } catch (_: Throwable) { }
+        val modelPath = withContext(Dispatchers.IO) {
+            try {
+                activePfd?.close()
+                activePfd = null
+            } catch (_: Throwable) { }
 
-                scanManager.resolveModelPath(m) { pfd ->
-                    activePfd = pfd
-                }
+            scanManager.resolveModelPath(m) { pfd ->
+                activePfd = pfd
             }
+        }
 
-            if (modelPath == null) {
-                isLoadingModel = false
-                status = "Model file not found. Please sync or download again."
-                return@launch
-            }
-
-            if (modelFile == null) {
-                modelFile = File(m.file)
-            }
-
-            val loadResult = inferenceCoordinator.loadModel(
-                modelPath = modelPath,
-                contextWindowSize = contextWindowSize,
-                cpuThreads = cpuThreads,
-                requestedGpuLayers = requestedGpu
-            )
-
+        if (modelPath == null) {
             isLoadingModel = false
-            if (loadResult.isSuccess) {
-                activeContextTokens = loadResult.contextSize
-                val actualGpu = loadResult.actualGpuLayers
+            status = "Model file not found. Please sync or download again."
+            return false
+        }
 
-                val backendDesc = when {
-                    actualGpu > 0 -> {
-                        computeBackend = "GPU"
-                        gpuLayers = actualGpu
-                        "GPU Accelerated ($actualGpu layers)"
-                    }
-                    requestedGpu > 0 -> {
-                        computeBackend = "CPU"
-                        gpuLayers = 0
-                        "CPU (KleidiAI NEON · Auto-offloaded from GPU)"
-                    }
-                    else -> {
-                        computeBackend = "CPU"
-                        gpuLayers = 0
-                        "CPU (KleidiAI NEON Optimized)"
-                    }
+        if (modelFile == null) {
+            modelFile = File(m.file)
+        }
+
+        val loadResult = inferenceCoordinator.loadModel(
+            modelPath = modelPath,
+            contextWindowSize = contextWindowSize,
+            cpuThreads = cpuThreads,
+            requestedGpuLayers = requestedGpu
+        )
+
+        isLoadingModel = false
+        if (loadResult.isSuccess) {
+            activeContextTokens = loadResult.contextSize
+            val actualGpu = loadResult.actualGpuLayers
+
+            val backendDesc = when {
+                actualGpu > 0 -> {
+                    computeBackend = "GPU"
+                    gpuLayers = actualGpu
+                    "GPU Accelerated ($actualGpu layers)"
                 }
-                status = "Ready — ${selectedModel.label} · $backendDesc"
-                if (messages.isEmpty()) {
-                    messages = listOf(
-                        ChatMsg(
-                            role = "assistant",
-                            text = "Ready! Running ${selectedModel.label} offline on your device ($backendDesc). Ask me anything."
-                        )
-                    )
-                    ChatHistoryStorage.saveMessages(getApplication(), messages)
+                requestedGpu > 0 -> {
+                    computeBackend = "CPU"
+                    gpuLayers = 0
+                    "CPU (KleidiAI NEON · Auto-offloaded from GPU)"
                 }
-            } else {
-                status = loadResult.errorMessage ?: "Could not load model."
+                else -> {
+                    computeBackend = "CPU"
+                    gpuLayers = 0
+                    "CPU (KleidiAI NEON Optimized)"
+                }
             }
+            status = "Ready — ${selectedModel.label} · $backendDesc"
+            if (messages.isEmpty()) {
+                messages = listOf(
+                    ChatMsg(
+                        role = "assistant",
+                        text = "Ready! Running ${selectedModel.label} offline on your device ($backendDesc). Ask me anything."
+                    )
+                )
+                ChatHistoryStorage.saveMessages(getApplication(), messages)
+            }
+            return true
+        } else {
+            status = loadResult.errorMessage ?: "Could not load model."
+            return false
+        }
+    }
+
+    private fun loadModelForSelected() {
+        if (busy) return
+        viewModelScope.launch {
+            loadModelForSelectedSuspend()
         }
     }
 
     fun send(userText: String) {
         val text = userText.trim()
-        if (text.isEmpty() || busy || !isModelLoaded) return
+        if (text.isEmpty() || busy) return
+
         messages = messages + ChatMsg(role = "user", text = text)
         ChatHistoryStorage.saveMessages(getApplication(), messages)
         streamingText = ""
         isGenerating = true
-        status = "Thinking on-device…"
 
         val activeSystemPrompt = if (systemPromptEnabled && systemPrompt.isNotBlank()) systemPrompt.trim() else ""
         val history = messages.dropLast(1).takeLast(8).map { it.role to it.text }
-        val prompt = LlamaBridge.buildLfmPrompt(activeSystemPrompt, history, text)
-
-        val startTime = System.currentTimeMillis()
-        var tokenCount = 0
+        val prompt = LlamaBridge.buildPrompt(
+            family = selectedModel.family,
+            modelFileName = selectedModel.file,
+            system = activeSystemPrompt,
+            history = history,
+            user = text
+        )
 
         genJob = viewModelScope.launch {
+            if (!isModelLoaded) {
+                userEjectedModel = false
+                val loaded = loadModelForSelectedSuspend()
+                if (!loaded) {
+                    isGenerating = false
+                    return@launch
+                }
+            }
+
+            status = "Thinking on-device…"
+            val startTime = System.currentTimeMillis()
+            var tokenCount = 0
+
             val out = inferenceCoordinator.generateStreaming(
                 prompt = prompt,
                 maxTokens = maxTokens,

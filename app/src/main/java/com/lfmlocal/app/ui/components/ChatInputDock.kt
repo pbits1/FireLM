@@ -39,7 +39,8 @@ fun ChatInputDock(
 ) {
     val focusManager = LocalFocusManager.current
     val hasText = input.isNotBlank()
-    val canSend = hasText && vm.isModelLoaded && !vm.busy
+    val isDownloaded = vm.isModelDownloaded(vm.selectedModel)
+    val canSend = hasText && !vm.busy && (vm.isModelLoaded || isDownloaded)
 
     Column(
         modifier = modifier
@@ -100,7 +101,8 @@ fun ChatInputDock(
                         "Downloading model ($pct%)…"
                     }
                     vm.isLoadingModel -> "Loading model into memory…"
-                    !vm.isModelLoaded -> "Select or download a model to chat…"
+                    !isDownloaded -> "Select or download a model to chat…"
+                    !vm.isModelLoaded -> "Model in standby. Message to wake…"
                     else -> "Message FireLM…"
                 }
 
@@ -118,7 +120,7 @@ fun ChatInputDock(
                             color = MaterialTheme.colorScheme.tertiary
                         )
                     },
-                    enabled = !vm.busy && vm.isModelLoaded,
+                    enabled = !vm.busy && (vm.isModelLoaded || isDownloaded),
                     maxLines = 5,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
