@@ -112,6 +112,19 @@ object ModelCatalog {
             description = "Trained on 11 trillion tokens (~1.0GB). Superb general knowledge and natural human conversation."
         ),
 
+        // --- GOOGLE GEMMA 4 ---
+        LfmModel(
+            id = "gemma-4-e2b-it",
+            label = "Gemma 4 E2B · Edge Reasoning",
+            family = "Google",
+            repo = "unsloth/gemma-4-E2B-it-GGUF",
+            file = "gemma-4-E2B-it-Q4_K_M.gguf",
+            sizeMb = 3185,
+            exactBytes = 3339837440L,
+            minRamMb = 6000,
+            description = "Google DeepMind's flagship Gemma 4 edge model (~3.1GB). 128K context, native thinking mode, and multimodal reasoning."
+        ),
+
         // --- GOOGLE GEMMA 2 ---
         LfmModel(
             id = "gemma-2-2b-it",

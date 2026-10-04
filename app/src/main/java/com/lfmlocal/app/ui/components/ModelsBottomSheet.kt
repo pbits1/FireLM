@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Eject
 import androidx.compose.material.icons.filled.FolderOpen
@@ -177,7 +178,9 @@ fun ModelsBottomSheet(
                             onSelect = {
                                 vm.selectModel(model)
                                 onDismiss()
-                            }
+                            },
+                            onStartDownload = {},
+                            onCancelDownload = {}
                         )
                     }
 
@@ -209,8 +212,13 @@ fun ModelsBottomSheet(
                                     onDismiss()
                                 } else {
                                     vm.selectModel(model)
-                                    vm.startDownload()
                                 }
+                            },
+                            onStartDownload = {
+                                vm.startDownload(model)
+                            },
+                            onCancelDownload = {
+                                vm.cancelDownload(model.id)
                             }
                         )
                     }
@@ -239,8 +247,13 @@ fun ModelsBottomSheet(
                                     onDismiss()
                                 } else {
                                     vm.selectModel(model)
-                                    vm.startDownload()
                                 }
+                            },
+                            onStartDownload = {
+                                vm.startDownload(model)
+                            },
+                            onCancelDownload = {
+                                vm.cancelDownload(model.id)
                             }
                         )
                     }
@@ -258,11 +271,15 @@ fun ModelsBottomSheet(
 private fun ModelRowItem(
     model: LfmModel,
     vm: ChatViewModel,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
+    onStartDownload: () -> Unit,
+    onCancelDownload: () -> Unit
 ) {
     val isSelected = vm.selectedModel.id == model.id
     val isDownloaded = vm.isModelDownloaded(model)
-    val isDownloading = isSelected && vm.downloadFraction != null
+    val isThisDownloading = vm.isModelDownloading(model.id)
+    val downloadInfo = vm.getDownloadInfo(model.id)
+    val downloadFraction = downloadInfo?.fraction ?: 0f
 
     Surface(
         onClick = onSelect,
@@ -322,25 +339,35 @@ private fun ModelRowItem(
 
                 Spacer(Modifier.height(2.dp))
 
-                val subtitle = model.label.substringAfter(" ·", "")
-                val descText = if (subtitle.isNotBlank()) "${model.sizeMb} MB · $subtitle" else "${model.sizeMb} MB · ${model.description}"
-                Text(
-                    text = descText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    maxLines = 1
-                )
-
-                if (isDownloading) {
+                if (isThisDownloading) {
+                    val pct = (downloadFraction * 100).toInt()
+                    val mbDown = (downloadInfo?.downloadedBytes ?: 0L) / (1024 * 1024)
+                    val mbTotal = (downloadInfo?.totalBytes ?: (model.sizeMb * 1024L * 1024L)) / (1024 * 1024)
+                    Text(
+                        text = "Downloading: $pct% · $mbDown / $mbTotal MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
-                        progress = { vm.downloadFraction ?: 0f },
+                        progress = { downloadFraction },
                         modifier = Modifier
-                            .fillMaxWidth(0.8f)
+                            .fillMaxWidth(0.85f)
                             .height(3.dp)
                             .clip(RoundedCornerShape(1.5.dp)),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.outlineVariant
+                    )
+                } else {
+                    val subtitle = model.label.substringAfter(" ·", "")
+                    val descText = if (subtitle.isNotBlank()) "${model.sizeMb} MB · $subtitle" else "${model.sizeMb} MB · ${model.description}"
+                    Text(
+                        text = descText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1
                     )
                 }
             }
@@ -348,6 +375,33 @@ private fun ModelRowItem(
             Spacer(Modifier.width(10.dp))
 
             when {
+                isThisDownloading -> {
+                    Surface(
+                        onClick = onCancelDownload,
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Cancel Download",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Cancel",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
                 isSelected -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (vm.isModelLoaded) {
@@ -404,6 +458,33 @@ private fun ModelRowItem(
                                 }
                             }
                             Spacer(Modifier.width(8.dp))
+                        } else if (!model.isCustom) {
+                            Surface(
+                                onClick = onStartDownload,
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Download,
+                                        contentDescription = "Get Model",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Get",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(8.dp))
                         }
 
                         Surface(
@@ -440,7 +521,7 @@ private fun ModelRowItem(
                 }
                 else -> {
                     Surface(
-                        onClick = onSelect,
+                        onClick = onStartDownload,
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)

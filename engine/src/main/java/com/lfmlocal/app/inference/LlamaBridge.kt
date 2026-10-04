@@ -44,6 +44,9 @@ object LlamaBridge {
             family.equals("Meta", ignoreCase = true) || modelFileName.contains("llama-3", ignoreCase = true) -> {
                 buildLlama3Prompt(system, history, user)
             }
+            modelFileName.contains("gemma-4", ignoreCase = true) -> {
+                buildGemma4Prompt(system, history, user)
+            }
             family.equals("Google", ignoreCase = true) || modelFileName.contains("gemma", ignoreCase = true) -> {
                 buildGemmaPrompt(system, history, user)
             }
@@ -122,6 +125,26 @@ object LlamaBridge {
         return sb.toString()
     }
 
+    /** Google Gemma 4 chat template (<bos><|turn>system\n...<turn|>\n<|turn>user\n...<turn|>\n<|turn>model\n) */
+    fun buildGemma4Prompt(system: String, history: List<Pair<String, String>>, user: String): String {
+        val sb = StringBuilder()
+        sb.append("<bos>")
+        if (system.isNotBlank()) {
+            sb.append("<|turn>system\n").append(system.trim()).append("<turn|>\n")
+        }
+        for ((role, text) in history) {
+            val r = if (role == "assistant") "model" else "user"
+            sb.append("<|turn>").append(r).append("\n")
+                .append(sanitize(text.trim()))
+                .append("<turn|>\n")
+        }
+        sb.append("<|turn>user\n")
+            .append(sanitize(user.trim()))
+            .append("<turn|>\n")
+        sb.append("<|turn>model\n")
+        return sb.toString()
+    }
+
     private fun sanitize(input: String): String =
         input.replace("<|im_start|>", "")
             .replace("<|im_end|>", "")
@@ -132,6 +155,8 @@ object LlamaBridge {
             .replace("<|eot_id|>", "")
             .replace("<start_of_turn>", "")
             .replace("<end_of_turn>", "")
+            .replace("<|turn>", "")
+            .replace("<turn|>", "")
             .replace("<bos>", "")
 
     suspend fun generateStreaming(

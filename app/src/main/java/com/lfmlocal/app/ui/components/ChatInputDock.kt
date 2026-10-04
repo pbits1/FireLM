@@ -51,6 +51,7 @@ fun ChatInputDock(
     ) {
         // Subtle download progress strip when download is active in the background
         if (vm.isDownloading) {
+            val dlLabel = vm.downloadingModelLabel?.substringBefore(" ·") ?: vm.selectedModel.label.substringBefore(" ·")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -59,7 +60,7 @@ fun ChatInputDock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Downloading ${vm.selectedModel.label.substringBefore(" ·")}…",
+                    text = "Downloading $dlLabel…",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
@@ -95,8 +96,9 @@ fun ChatInputDock(
                     .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isSelectedDownloading = vm.isModelDownloading(vm.selectedModel.id)
                 val placeholderText = when {
-                    vm.isDownloading -> {
+                    isSelectedDownloading -> {
                         val pct = ((vm.downloadFraction ?: 0f) * 100).toInt()
                         "Downloading model ($pct%)…"
                     }

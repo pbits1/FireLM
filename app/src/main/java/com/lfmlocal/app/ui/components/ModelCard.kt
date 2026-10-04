@@ -33,7 +33,8 @@ fun ModelCard(
 ) {
     val isSelected = vm.selectedModel.id == model.id
     val isDownloaded = vm.isModelDownloaded(model)
-    val isCurrentDownloading = isSelected && vm.downloadFraction != null
+    val isCurrentDownloading = vm.isModelDownloading(model.id)
+    val downloadProgress = vm.getDownloadProgress(model.id) ?: 0f
 
     val cardBorderColor = when {
         isSelected && vm.isModelLoaded -> MatrixEmerald.copy(alpha = 0.6f)
@@ -149,7 +150,7 @@ fun ModelCard(
             if (isCurrentDownloading) {
                 Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(
-                    progress = { vm.downloadFraction ?: 0f },
+                    progress = { downloadProgress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
@@ -164,12 +165,12 @@ fun ModelCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "DOWNLOADING: ${((vm.downloadFraction ?: 0f) * 100).toInt()}%",
+                        text = "DOWNLOADING: ${(downloadProgress * 100).toInt()}%",
                         style = TelemetryMicroStyle,
                         color = PhosphorCyan
                     )
                     TextButton(
-                        onClick = { vm.cancelDownload() },
+                        onClick = { vm.cancelDownload(model.id) },
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Text(
@@ -194,10 +195,9 @@ fun ModelCard(
                     // Download Action Button
                     Button(
                         onClick = {
-                            if (!isSelected) vm.selectModel(model)
-                            vm.startDownload()
+                            vm.startDownload(model)
                         },
-                        enabled = vm.downloadFraction == null,
+                        enabled = !vm.isDownloading,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(

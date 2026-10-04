@@ -29,6 +29,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ModelDownloadProgress(
+    val modelId: String,
+    val modelLabel: String = "",
+    val fraction: Float = 0f,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val isRunning: Boolean = false,
+    val isDone: Boolean = false,
+    val error: String? = null
+)
+
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
@@ -53,7 +64,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var isLoadingModel by mutableStateOf(false)
         private set
-    var downloadFraction by mutableStateOf<Float?>(null)
+    var activeDownload by mutableStateOf<ModelDownloadProgress?>(null)
         private set
     var status by mutableStateOf("Ready to chat offline.")
         private set
@@ -115,10 +126,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var themeMode by mutableStateOf(AppPreferences.getThemeMode(application, "dark"))
         private set
 
-    val isDownloading: Boolean get() = downloadFraction != null
+    val downloadingModelId: String? get() = activeDownload?.takeIf { it.isRunning }?.modelId
+    val downloadingModelLabel: String? get() = activeDownload?.takeIf { it.isRunning }?.modelLabel
+    val isDownloading: Boolean get() = activeDownload?.isRunning == true
+    val downloadFraction: Float? get() = activeDownload?.takeIf { it.isRunning }?.fraction
+
+    fun isModelDownloading(modelId: String): Boolean =
+        activeDownload?.isRunning == true && activeDownload?.modelId == modelId
+
+    fun getDownloadProgress(modelId: String): Float? =
+        if (isModelDownloading(modelId)) activeDownload?.fraction else null
+
+    fun getDownloadInfo(modelId: String): ModelDownloadProgress? =
+        if (activeDownload?.modelId == modelId) activeDownload else null
+
     val isModelLoaded: Boolean get() = inferenceCoordinator.isLoaded
     val isModelLoading: Boolean get() = isLoadingModel
-    val busy: Boolean get() = isGenerating || isLoadingModel || isDownloading
+    val busy: Boolean get() = isGenerating || isLoadingModel
 
     init {
         messages = ChatHistoryStorage.loadMessages(application)
@@ -131,20 +155,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeDownloadService() {
         viewModelScope.launch {
             ModelDownloadService.downloadStatus.collect { active ->
-                if (active.modelId.isNotBlank() && active.modelId == selectedModel.id) {
+                if (active.modelId.isNotBlank()) {
                     if (active.isRunning) {
-                        downloadFraction = active.state.fraction
+                        activeDownload = ModelDownloadProgress(
+                            modelId = active.modelId,
+                            modelLabel = active.modelLabel,
+                            fraction = active.state.fraction,
+                            downloadedBytes = active.state.downloadedBytes,
+                            totalBytes = active.state.totalBytes,
+                            isRunning = true
+                        )
                         val pct = (active.state.fraction * 100).toInt()
-                        status = "Downloading ${active.modelLabel} ($pct%)…"
+                        val mbDown = active.state.downloadedBytes / (1024 * 1024)
+                        val mbTotal = active.state.totalBytes / (1024 * 1024)
+                        status = "Downloading ${active.modelLabel} ($pct% · $mbDown/$mbTotal MB)…"
                     } else if (active.state.done) {
-                        downloadFraction = null
+                        val finishedModelId = active.modelId
+                        activeDownload = null
                         refreshLocalState()
-                        if (GgufScanner.isDownloaded(getApplication(), selectedModel)) {
+                        val finishedModel = ModelCatalog.models.find { it.id == finishedModelId }
+                        status = "Ready — ${finishedModel?.label ?: finishedModelId} · 100% offline"
+                        if (selectedModel.id == finishedModelId) {
                             loadModelForSelected()
                         }
                     } else if (active.state.error != null) {
-                        downloadFraction = null
+                        activeDownload = null
                         status = "Download error: ${active.state.error}"
+                    }
+                } else if (!active.isRunning) {
+                    if (directDownloadJob == null) {
+                        activeDownload = null
                     }
                 }
             }
@@ -276,12 +316,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startDownload() {
-        if (busy || selectedModel.isCustom) return
-        status = "Initializing download for ${selectedModel.label}…"
-        val startedForeground = ModelDownloadService.startDownload(getApplication(), selectedModel.id)
+    fun startDownload(targetModel: LfmModel = selectedModel) {
+        if (targetModel.isCustom) return
+        if (isDownloading) {
+            val current = downloadingModelLabel ?: "Another model"
+            status = "$current is already downloading. Cancel or wait for it to finish."
+            return
+        }
+        status = "Initializing download for ${targetModel.label}…"
+        activeDownload = ModelDownloadProgress(
+            modelId = targetModel.id,
+            modelLabel = targetModel.label,
+            fraction = 0f,
+            totalBytes = if (targetModel.exactBytes > 0L) targetModel.exactBytes else targetModel.sizeMb * 1024L * 1024L,
+            isRunning = true
+        )
+        val startedForeground = ModelDownloadService.startDownload(getApplication(), targetModel.id)
         if (!startedForeground) {
-            runDirectDownload(selectedModel)
+            runDirectDownload(targetModel)
         }
     }
 
@@ -295,7 +347,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         } catch (_: Exception) {}
 
-        downloadFraction = 0f
+        activeDownload = ModelDownloadProgress(
+            modelId = model.id,
+            modelLabel = model.label,
+            fraction = 0f,
+            totalBytes = if (model.exactBytes > 0L) model.exactBytes else model.sizeMb * 1024L * 1024L,
+            isRunning = true
+        )
         status = "Downloading ${model.label}…"
 
         directDownloadJob = viewModelScope.launch(Dispatchers.IO) {
@@ -308,9 +366,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 ModelDownloadService.updateProgress(active)
                 viewModelScope.launch(Dispatchers.Main) {
-                    downloadFraction = st.fraction
+                    activeDownload = ModelDownloadProgress(
+                        modelId = model.id,
+                        modelLabel = model.label,
+                        fraction = st.fraction,
+                        downloadedBytes = st.downloadedBytes,
+                        totalBytes = st.totalBytes,
+                        isRunning = !st.done && st.error == null
+                    )
                     val pct = (st.fraction * 100).toInt()
-                    status = "Downloading ${model.label} ($pct%)…"
+                    val mbDown = st.downloadedBytes / (1024 * 1024)
+                    val mbTotal = st.totalBytes / (1024 * 1024)
+                    status = "Downloading ${model.label} ($pct% · $mbDown/$mbTotal MB)…"
                 }
             }
 
@@ -318,13 +385,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (vmWakeLock?.isHeld == true) vmWakeLock?.release()
                 } catch (_: Exception) {}
-                downloadFraction = null
+                activeDownload = null
 
                 result.onSuccess { file ->
                     refreshLocalState()
-                    modelFile = file
-                    loadModelForSelected()
                     status = "Ready — ${model.label} · 100% offline"
+                    if (selectedModel.id == model.id) {
+                        modelFile = file
+                        loadModelForSelected()
+                    }
                 }.onFailure { err ->
                     status = "Download error: ${err.message}"
                 }
@@ -332,14 +401,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun cancelDownload() {
+    fun cancelDownload(modelId: String? = null) {
         directDownloadJob?.cancel()
         directDownloadJob = null
         try {
             if (vmWakeLock?.isHeld == true) vmWakeLock?.release()
         } catch (_: Exception) {}
         ModelDownloadService.cancelDownload(getApplication())
-        downloadFraction = null
+        activeDownload = null
         status = "Download cancelled."
     }
 
