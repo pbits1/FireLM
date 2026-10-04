@@ -1,8 +1,12 @@
 package com.lfmlocal.app.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -23,8 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lfmlocal.app.data.LfmModel
 import com.lfmlocal.app.data.ModelCatalog
 import com.lfmlocal.app.download.ModelDownloader
@@ -36,6 +44,48 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val storageMb = remember { ModelDownloader.getAvailableStorageMb(ctx) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.checkStoragePermission()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        vm.checkStoragePermission()
+    }
+
+    fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:${ctx.packageName}")
+                }
+                ctx.startActivity(intent)
+            } catch (_: Exception) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    ctx.startActivity(intent)
+                } catch (_: Exception) {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${ctx.packageName}")
+                    }
+                    ctx.startActivity(intent)
+                }
+            }
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -43,12 +93,6 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             val name = getFileNameFromUri(ctx, it) ?: "imported_model.gguf"
             vm.importCustomGguf(it, name)
         }
-    }
-
-    val folderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        uri?.let { vm.setCustomModelsFolder(it) }
     }
 
     Scaffold(
@@ -171,6 +215,88 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 }
             }
 
+            // Storage Permission Warning Banner if not granted
+            if (!vm.hasStoragePermission) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = ObsidianSurfaceElevated,
+                        border = BorderStroke(1.5.dp, SunsetAmber),
+                        shadowElevation = 6.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = SunsetAmber.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Security,
+                                            contentDescription = null,
+                                            tint = SunsetAmber,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "STORAGE ACCESS REQUIRED",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = SunsetAmber
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        "Permission Needed for /Download/FireLM",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+
+                            Text(
+                                "Android requires 'All files access' permission so FireLM can detect and run your .gguf models from the /Download/FireLM folder with native zero-copy speed.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = TextSecondary,
+                                lineHeight = 18.sp
+                            )
+
+                            Spacer(Modifier.height(14.dp))
+
+                            Button(
+                                onClick = { requestStorageAccess() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SunsetAmber,
+                                    contentColor = Color.Black
+                                ),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.FolderShared, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Grant Storage Access in Settings", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Models Storage Directory & Dynamic Sync Card
             item {
                 Surface(
@@ -207,14 +333,14 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
 
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    "MODELS DIRECTORY & DYNAMIC SYNC",
+                                    "MODELS DIRECTORY",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                     fontWeight = FontWeight.Bold,
                                     color = TextMuted
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    vm.modelsFolderName,
+                                    "/Download/FireLM",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
@@ -227,7 +353,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                                 border = BorderStroke(1.dp, ObsidianBorderSubtle)
                             ) {
                                 Text(
-                                    "Zero-Copy SAF",
+                                    "Zero-Copy Direct",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                     color = HyperEmerald
@@ -238,50 +364,117 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                         Spacer(Modifier.height(10.dp))
 
                         Text(
-                            "Store or drop .gguf files or folders directly into this directory via USB or file manager. FireLM indexes and loads them dynamically with zero duplicate storage.",
+                            "Drop .gguf models or subfolders directly into /Download/FireLM via USB, file manager, or browser. FireLM automatically detects and runs them with zero duplicate storage.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = TextMuted
+                            color = TextMuted,
+                            lineHeight = 18.sp
                         )
 
                         Spacer(Modifier.height(14.dp))
 
-                        Row(
+                        Button(
+                            onClick = {
+                                if (!vm.hasStoragePermission) {
+                                    requestStorageAccess()
+                                } else {
+                                    vm.refreshLocalState()
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            enabled = !vm.isSyncingModels,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ElectricCyanContainer,
+                                contentColor = ElectricCyan
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = { folderPicker.launch(null) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, ObsidianBorder),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = ElectricCyan
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Choose Folder", style = MaterialTheme.typography.labelMedium)
-                            }
-
-                            Button(
-                                onClick = { vm.refreshCustomModels() },
-                                modifier = Modifier.weight(1f),
-                                enabled = !vm.isSyncingModels,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ElectricCyanContainer,
-                                    contentColor = ElectricCyan
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    if (vm.isSyncingModels) "Scanning…" else "Sync / Rescan",
-                                    style = MaterialTheme.typography.labelMedium
+                            if (vm.isSyncingModels) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = ElectricCyan
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Scanning /Download/FireLM…", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Sync / Rescan /Download/FireLM", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                }
+            }
+
+            // Custom & Local Models Header (Positioned at TOP for immediate visibility)
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.FolderSpecial,
+                        contentDescription = null,
+                        tint = AuraViolet,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Custom & Local Models (/Download/FireLM)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = ObsidianSurfaceElevated,
+                        border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                    ) {
+                        Text(
+                            "${vm.customModels.size} found",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = if (vm.customModels.isNotEmpty()) HyperEmerald else TextMuted,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            if (vm.customModels.isNotEmpty()) {
+                items(vm.customModels, key = { it.id }) { custom ->
+                    ModelCard(
+                        model = custom,
+                        vm = vm,
+                        ctx = ctx
+                    )
+                }
+            } else {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = ObsidianSurface,
+                        border = BorderStroke(1.dp, ObsidianBorderSubtle)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                if (!vm.hasStoragePermission)
+                                    "Storage permission required to scan /Download/FireLM.\nTap 'Grant Storage Access' above."
+                                else
+                                    "No custom models detected in /Download/FireLM yet.\nDrop any .gguf file into Download/FireLM and tap Sync.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
@@ -292,7 +485,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 2.dp),
+                        .padding(top = 10.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -311,46 +504,12 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 }
             }
 
-            items(ModelCatalog.models) { m ->
+            items(ModelCatalog.models, key = { it.id }) { m ->
                 ModelCard(
                     model = m,
                     vm = vm,
                     ctx = ctx
                 )
-            }
-
-            // Custom models section if any
-            if (vm.customModels.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            tint = AuraViolet,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Imported Local Models",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                }
-
-                items(vm.customModels) { custom ->
-                    ModelCard(
-                        model = custom,
-                        vm = vm,
-                        ctx = ctx
-                    )
-                }
             }
 
             item {
@@ -457,9 +616,9 @@ private fun ModelCard(
                 }
                 SpecBadge(label = "~${model.sizeMb} MB", tint = ElectricCyanDim)
                 SpecBadge(label = "RAM: ≥${model.minRamMb} MB", tint = TextSecondary)
-                val quant = if (model.file.contains("q4_k_m", ignoreCase = true)) "Q4_K_M"
-                            else if (model.file.contains("q8_0", ignoreCase = true)) "Q8_0"
-                            else "GGUF"
+                val quantRegex = Regex("""(?i)([qQ][0-9]_[A-Za-z0-9_]+)""")
+                val match = quantRegex.find(model.file)
+                val quant = match?.value?.uppercase() ?: if (model.file.endsWith(".gguf", ignoreCase = true)) "GGUF" else "MODEL"
                 SpecBadge(label = quant, tint = AuraViolet)
                 if (model.isCustom) {
                     SpecBadge(label = "Custom", tint = SunsetAmber)

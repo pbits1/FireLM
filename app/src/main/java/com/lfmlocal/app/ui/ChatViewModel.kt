@@ -1,16 +1,21 @@
 package com.lfmlocal.app.ui
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -72,11 +77,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var activeContextTokens by mutableStateOf(AppPreferences.getContextWindowSize(application, 2048))
         private set
-    var modelsFolderName by mutableStateOf(AppPreferences.getCustomModelsFolderName(application, "Download/FireLM"))
+    var modelsFolderName by mutableStateOf("Download/FireLM")
+        private set
+    var hasStoragePermission by mutableStateOf(false)
         private set
     var isSyncingModels by mutableStateOf(false)
         private set
     private var activePfd: ParcelFileDescriptor? = null
+
+    fun checkStoragePermission(): Boolean {
+        val ctx = getApplication<Application>()
+        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                ctx,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+        hasStoragePermission = granted
+        return granted
+    }
 
     // Hardware & Inference tuning (Persisted)
     var computeBackend by mutableStateOf(AppPreferences.getComputeBackend(application, "GPU"))
@@ -117,6 +138,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Restore persistent chat history from flash storage
         messages = ChatHistoryStorage.loadMessages(application)
+        checkStoragePermission()
         refreshCustomModels()
         refreshLocalState()
         observeDownloadService()
@@ -204,27 +226,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppPreferences.saveSustainedPerformance(getApplication(), enabled)
     }
 
-    fun setCustomModelsFolder(uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val ctx = getApplication<Application>()
-            try {
-                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                ctx.contentResolver.takePersistableUriPermission(uri, flags)
-            } catch (_: Throwable) { }
-
-            val doc = DocumentFile.fromTreeUri(ctx, uri)
-            val folderName = doc?.name ?: "Selected Folder"
-            AppPreferences.saveCustomModelsFolderUri(ctx, uri.toString())
-            AppPreferences.saveCustomModelsFolderName(ctx, folderName)
-
-            withContext(Dispatchers.Main) {
-                modelsFolderName = folderName
-                status = "Models folder set to '$folderName'. Scanning for .gguf models…"
-                refreshCustomModels()
-            }
-        }
-    }
-
     fun selectModel(m: LfmModel) {
         if (selectedModel.id == m.id && handle != 0L) return
         AppPreferences.saveSelectedModelId(getApplication(), m.id)
@@ -241,6 +242,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshLocalState() {
+        checkStoragePermission()
         refreshCustomModels()
         val ctx = getApplication<Application>()
         val downloaded = ModelCatalog.models.filter {
@@ -261,6 +263,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshCustomModels() {
+        checkStoragePermission()
         viewModelScope.launch(Dispatchers.IO) {
             val ctx = getApplication<Application>()
             withContext(Dispatchers.Main) { isSyncingModels = true }
@@ -268,41 +271,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val detectedList = mutableListOf<LfmModel>()
             val seenKeys = mutableSetOf<String>()
 
-            // 1. Scan user's SAF tree folder if configured
-            val treeUriStr = AppPreferences.getCustomModelsFolderUri(ctx)
-            if (treeUriStr != null) {
-                try {
-                    val treeUri = Uri.parse(treeUriStr)
-                    val treeDoc = DocumentFile.fromTreeUri(ctx, treeUri)
-                    if (treeDoc != null && treeDoc.exists()) {
-                        treeDoc.listFiles().forEach { doc ->
-                            if (doc.isFile && (doc.name?.endsWith(".gguf", ignoreCase = true) == true)) {
-                                val name = doc.name ?: "model.gguf"
-                                val key = name.lowercase()
-                                if (!seenKeys.contains(key) && ModelCatalog.models.none { it.localName.equals(name, ignoreCase = true) }) {
-                                    if (ModelDownloader.isValidGguf(ctx, doc.uri)) {
-                                        detectedList.add(ModelCatalog.createCustomModelFromDoc(name, doc.length(), doc.uri))
-                                        seenKeys.add(key)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (_: Throwable) { }
-            }
-
-            // 2. Scan physical directories (Download/FireLM, external app storage, internal storage)
+            // Scan physical directories (/Download/FireLM, external app storage, internal storage)
+            // recursively up to depth 3 so user can drop files or subfolders
             for (dir in ModelDownloader.allSearchDirs(ctx)) {
                 try {
                     if (dir.exists() && dir.isDirectory) {
-                        val files = dir.listFiles { f ->
-                            f.isFile && f.extension.equals("gguf", ignoreCase = true) &&
-                                ModelCatalog.models.none { it.localName.equals(f.name, ignoreCase = true) }
-                        } ?: emptyArray()
-
+                        val files = ModelDownloader.findGgufFilesInDir(dir, maxDepth = 3)
                         for (f in files) {
                             val key = f.name.lowercase()
-                            if (!seenKeys.contains(key) && ModelDownloader.isValidGguf(f)) {
+                            val isCatalog = ModelCatalog.models.any {
+                                it.localName.equals(f.name, ignoreCase = true) || it.file.equals(f.name, ignoreCase = true)
+                            }
+                            if (!isCatalog && !seenKeys.contains(key) && ModelDownloader.isValidGguf(f)) {
                                 detectedList.add(ModelCatalog.createCustomModel(f))
                                 seenKeys.add(key)
                             }

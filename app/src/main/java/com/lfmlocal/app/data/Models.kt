@@ -96,13 +96,13 @@ object ModelCatalog {
         val ramMb = (sizeMb * 1.6).toInt()
         val cleanName = if (file.name.endsWith(".gguf", ignoreCase = true)) file.name.dropLast(5) else file.name
         return LfmModel(
-            id = "custom-${file.name}",
-            label = cleanName.take(28),
+            id = "custom-${file.absolutePath.hashCode()}-${file.name}",
+            label = cleanName,
             file = file.name,
             sizeMb = sizeMb,
             exactBytes = file.length(),
             minRamMb = ramMb,
-            description = "Custom GGUF located in ${file.parentFile?.name ?: "storage"}.",
+            description = "Custom GGUF in ${file.parentFile?.name ?: "Download/FireLM"}.",
             isCustom = true,
             customFilePath = file.absolutePath
         )

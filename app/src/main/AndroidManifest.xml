@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Download GGUFs from Hugging Face, no other network needed at runtime -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -9,9 +10,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Import .gguf via file picker on Android 9 and lower -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+
+    <!-- Storage permissions to directly scan and load GGUFs from /Download/FireLM -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"
+        tools:ignore="ScopedStorage" />
 
     <application
         android:name=".LfmApp"
@@ -23,6 +29,7 @@
         android:largeHeap="true"
         android:appCategory="game"
         android:isGame="true"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="false">
 
         <activity

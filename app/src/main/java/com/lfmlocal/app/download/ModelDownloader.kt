@@ -34,13 +34,32 @@ object ModelDownloader {
         return File(publicDownloads, "FireLM")
     }
 
+    fun getFireLMDirs(): List<File> {
+        val dirs = LinkedHashSet<File>()
+        try {
+            val pub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            dirs.add(File(pub, "FireLM"))
+            dirs.add(File(pub, "firelm"))
+        } catch (_: Throwable) { }
+        try {
+            val ext = Environment.getExternalStorageDirectory()
+            dirs.add(File(ext, "Download/FireLM"))
+            dirs.add(File(ext, "download/FireLM"))
+            dirs.add(File(ext, "Download/firelm"))
+        } catch (_: Throwable) { }
+        dirs.add(File("/storage/emulated/0/Download/FireLM"))
+        dirs.add(File("/sdcard/Download/FireLM"))
+        return dirs.toList()
+    }
+
     fun modelsDir(ctx: Context): File {
         // 1. Try public Download/FireLM
-        val pub = getPublicDownloadsFireLMDir()
-        try {
-            if (pub.exists() && pub.canWrite()) return pub
-            if (pub.mkdirs() && pub.canWrite()) return pub
-        } catch (_: Throwable) { }
+        for (dir in getFireLMDirs()) {
+            try {
+                if (dir.exists() && dir.canWrite()) return dir
+                if (dir.mkdirs() && dir.canWrite()) return dir
+            } catch (_: Throwable) { }
+        }
 
         // 2. Try app external files dir (Android/data/com.lfmlocal.app/files/models)
         try {
@@ -56,19 +75,55 @@ object ModelDownloader {
 
     fun allSearchDirs(ctx: Context): List<File> {
         val dirs = LinkedHashSet<File>()
-        val pub = getPublicDownloadsFireLMDir()
-        if (pub.exists()) dirs.add(pub)
+        for (d in getFireLMDirs()) {
+            if (d.exists() && d.isDirectory) dirs.add(d)
+        }
+        val primary = getPublicDownloadsFireLMDir()
+        try { if (!primary.exists()) primary.mkdirs() } catch (_: Throwable) { }
+        dirs.add(primary)
+
         ctx.getExternalFilesDir("models")?.let { if (it.exists()) dirs.add(it) }
         val internal = File(ctx.filesDir, "models")
         if (internal.exists()) dirs.add(internal)
         return dirs.toList()
     }
 
+    fun findGgufFilesInDir(dir: File, maxDepth: Int = 3): List<File> {
+        val results = mutableListOf<File>()
+        if (!dir.exists() || !dir.isDirectory) return results
+
+        fun walk(current: File, depth: Int) {
+            if (depth > maxDepth) return
+            val children = current.listFiles() ?: return
+            for (f in children) {
+                if (f.isDirectory) {
+                    if (!f.name.startsWith(".") && !f.name.startsWith("$")) {
+                        walk(f, depth + 1)
+                    }
+                } else if (f.isFile && f.extension.equals("gguf", ignoreCase = true)) {
+                    results.add(f)
+                }
+            }
+        }
+
+        walk(dir, 0)
+        return results
+    }
+
     fun destFile(ctx: Context, model: LfmModel): File {
         // If it already exists in any of our search dirs, use that
         for (dir in allSearchDirs(ctx)) {
-            val candidate = File(dir, model.localName)
-            if (candidate.exists()) return candidate
+            val candidate1 = File(dir, model.localName)
+            if (candidate1.exists() && isValidGguf(candidate1)) return candidate1
+
+            val candidate2 = File(dir, model.file)
+            if (candidate2.exists() && isValidGguf(candidate2)) return candidate2
+
+            // Also search subfolders (e.g. Download/FireLM/subfolder/model.gguf)
+            val subMatch = findGgufFilesInDir(dir, maxDepth = 2).find { f ->
+                (f.name.equals(model.localName, ignoreCase = true) || f.name.equals(model.file, ignoreCase = true)) && isValidGguf(f)
+            }
+            if (subMatch != null) return subMatch
         }
         return File(modelsDir(ctx), model.localName)
     }
@@ -125,15 +180,16 @@ object ModelDownloader {
 
         // For catalog models, search across all directories
         for (dir in allSearchDirs(ctx)) {
-            val f = File(dir, model.localName)
-            if (f.exists() && isValidGguf(f)) {
-                return if (model.exactBytes > 0L) {
-                    val len = f.length()
-                    len == model.exactBytes || abs(len - model.exactBytes) <= 4096L || (len >= model.exactBytes * 0.99 && len <= model.exactBytes * 1.01)
-                } else {
-                    f.length() > (model.sizeMb * 1024L * 1024L * 0.9)
-                }
+            val f1 = File(dir, model.localName)
+            if (f1.exists() && isValidGguf(f1)) return true
+
+            val f2 = File(dir, model.file)
+            if (f2.exists() && isValidGguf(f2)) return true
+
+            val subMatch = findGgufFilesInDir(dir, maxDepth = 2).find { f ->
+                (f.name.equals(model.localName, ignoreCase = true) || f.name.equals(model.file, ignoreCase = true)) && isValidGguf(f)
             }
+            if (subMatch != null) return true
         }
 
         return false
