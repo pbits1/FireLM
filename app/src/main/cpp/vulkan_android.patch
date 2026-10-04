@@ -1,0 +1,46 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp b/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
+index f7a21dd27..77ef17b07 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
+@@ -172,7 +172,7 @@ static vk_buffer ggml_vk_create_buffer(vk_device& device, size_t size, const std
+     buf->device = device;
+     buf->size = size;
+ 
+-    if (device->buffer_device_address) {
++    if (device->buffer_device_address && VULKAN_HPP_DEFAULT_DISPATCHER.vkGetBufferDeviceAddress) {
+         const vk::BufferDeviceAddressInfo addressInfo(buf->buffer);
+         buf->bda_addr = device->device.getBufferAddress(addressInfo);
+     }
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index bfc65bed8..69415bbf9 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -1043,11 +1043,14 @@ std::unique_ptr<vk_queue> ggml_vk_create_queue(vk_device& device, uint32_t queue
+     if (device->has_internally_synchronized_queues) {
+         h = std::make_shared<vk_queue_handle_unsynchronized>();
+         queue_info2.flags = eInternallySynchronizedKHR;
++        h->queue = device->device.getQueue2(queue_info2);
+     } else {
+         h = std::make_shared<vk_queue_handle_synchronized>();
++        h->queue = device->device.getQueue(queue_family_index, queue_index);
++    }
++    if (!h->queue) {
++        h->queue = device->device.getQueue(queue_family_index, queue_index);
+     }
+-
+-    h->queue = device->device.getQueue2(queue_info2);
+     h->device = device;
+     // Avoid concurrent submissions on NVIDIA due to driver bug.
+     if (device->vendor_id == VK_VENDOR_ID_NVIDIA) {
+@@ -4515,7 +4518,11 @@ vk_device ggml_vk_get_device(size_t idx) {
+                             getenv("GGML_VK_DISABLE_MULTI_ADD") == nullptr;
+ 
+         device->shader_int64 = device_features2.features.shaderInt64;
++#if defined(__ANDROID__)
++        device->buffer_device_address = false;
++#else
+         device->buffer_device_address = vk12_features.bufferDeviceAddress;
++#endif
+         device->vulkan_memory_model = vk12_features.vulkanMemoryModel;
+ 
+         if (device->subgroup_size_control) {
