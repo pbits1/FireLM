@@ -18,7 +18,7 @@ val DarkBorderSubtle = Color(0xFF1C1D22)
 
 val DarkTextPrimary = Color(0xFFF4F4F5)
 val DarkTextSecondary = Color(0xFFA1A1AA)
-val DarkTextMuted = Color(0xFF71717A)
+val DarkTextMuted = Color(0xFF8E8E93)
 
 val DarkAccent = Color(0xFFFFFFFF)
 val DarkOnAccent = Color(0xFF000000)
@@ -30,12 +30,12 @@ val LightSurface = Color(0xFFF8F8FA)
 val LightSurfaceElevated = Color(0xFFF0F0F3)
 val LightSurfaceHighlight = Color(0xFFE2E2E7)
 
-val LightBorder = Color(0xFFE4E4E7)
-val LightBorderSubtle = Color(0xFFEEEEF0)
+val LightBorder = Color(0xFFD4D4D8)
+val LightBorderSubtle = Color(0xFFE4E4E7)
 
 val LightTextPrimary = Color(0xFF09090B)
-val LightTextSecondary = Color(0xFF52525B)
-val LightTextMuted = Color(0xFF8E8E93)
+val LightTextSecondary = Color(0xFF3F3F46)
+val LightTextMuted = Color(0xFF64646B)
 
 val LightAccent = Color(0xFF000000)
 val LightOnAccent = Color(0xFFFFFFFF)
