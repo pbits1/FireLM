@@ -293,9 +293,9 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("ALL", "LOCAL / GGUF", "RECOMMENDED").forEach { filterTag ->
+                    listOf("ALL", "RECOMMENDED", "THINKING", "LOCAL").forEach { filterTag ->
                         val isFilterSelected = selectedFilter == filterTag
                         Surface(
                             onClick = { selectedFilter = filterTag },
@@ -324,7 +324,13 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             }
 
             // Custom & Local Models Header
-            if (selectedFilter != "RECOMMENDED") {
+            if (selectedFilter == "ALL" || selectedFilter == "LOCAL" || (selectedFilter == "THINKING" && vm.customModels.any { it.supportsThinking })) {
+                val visibleCustomModels = if (selectedFilter == "THINKING") {
+                    vm.customModels.filter { it.supportsThinking }
+                } else {
+                    vm.customModels
+                }
+
                 item {
                     Row(
                         modifier = Modifier
@@ -352,25 +358,25 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                             border = BorderStroke(1.dp, ConsoleBorderSubtle)
                         ) {
                             Text(
-                                text = "${vm.customModels.size} FOUND",
+                                text = "${visibleCustomModels.size} FOUND",
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = TelemetryMicroStyle.copy(fontSize = 9.sp),
-                                color = if (vm.customModels.isNotEmpty()) MatrixEmerald else TextMuted,
+                                color = if (visibleCustomModels.isNotEmpty()) MatrixEmerald else TextMuted,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                if (vm.customModels.isNotEmpty()) {
-                    items(vm.customModels, key = { it.id }) { custom ->
+                if (visibleCustomModels.isNotEmpty()) {
+                    items(visibleCustomModels, key = { it.id }) { custom ->
                         ModelCard(
                             model = custom,
                             vm = vm,
                             ctx = ctx
                         )
                     }
-                } else {
+                } else if (selectedFilter == "LOCAL") {
                     item {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -399,7 +405,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             }
 
             // Catalog Presets Header
-            if (selectedFilter != "LOCAL / GGUF") {
+            if (selectedFilter != "LOCAL") {
                 item {
                     Row(
                         modifier = Modifier
@@ -415,7 +421,7 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "OPTIMIZED LIQUID AI MODELS",
+                            text = if (selectedFilter == "THINKING") "THINKING & REASONING MODELS" else "AI MODEL CATALOG",
                             style = TelemetryMicroStyle,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -423,10 +429,10 @@ fun ModelsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                val catalogModels = if (selectedFilter == "RECOMMENDED") {
-                    ModelCatalog.models.filter { it.recommended }
-                } else {
-                    ModelCatalog.models
+                val catalogModels = when (selectedFilter) {
+                    "RECOMMENDED" -> ModelCatalog.models.filter { it.recommended }
+                    "THINKING" -> ModelCatalog.models.filter { it.supportsThinking }
+                    else -> ModelCatalog.models
                 }
 
                 items(catalogModels, key = { it.id }) { m ->

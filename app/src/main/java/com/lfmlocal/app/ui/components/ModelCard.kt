@@ -130,7 +130,9 @@ fun ModelCard(
                 val quantRegex = Regex("""(?i)([qQ][0-9]_[A-Za-z0-9_]+)""")
                 val match = quantRegex.find(model.file)
                 val quant = match?.value?.uppercase() ?: if (model.file.endsWith(".gguf", ignoreCase = true)) "GGUF" else "MODEL"
-                SpecBadge(label = quant, tint = SolarAmber)
+                if (model.supportsThinking) {
+                    SpecBadge(label = "🧠 THINKING", tint = PhosphorCyan)
+                }
                 if (model.isCustom) {
                     SpecBadge(label = "CUSTOM", tint = WorkstationViolet)
                 }

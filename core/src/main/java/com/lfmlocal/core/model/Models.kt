@@ -15,6 +15,7 @@ data class LfmModel(
     val exactBytes: Long = 0L,
     val minRamMb: Int,
     val recommended: Boolean = false,
+    val supportsThinking: Boolean = false,
     val description: String,
     val isCustom: Boolean = false,
     val customUriString: String? = null,
@@ -85,6 +86,7 @@ object ModelCatalog {
             sizeMb = 1066,
             exactBytes = 1117320800L,
             minRamMb = 3500,
+            supportsThinking = true,
             description = "Reasoning model with thinking tokens (~1.06GB). Solves math and logic puzzles step-by-step on device."
         ),
 
@@ -122,6 +124,7 @@ object ModelCatalog {
             sizeMb = 3185,
             exactBytes = 3339837440L,
             minRamMb = 6000,
+            supportsThinking = true,
             description = "Google DeepMind's flagship Gemma 4 edge model (~3.1GB). 128K context, native thinking mode, and multimodal reasoning."
         ),
 
@@ -214,6 +217,11 @@ object ModelCatalog {
         val sizeMb = (file.length() / (1024 * 1024)).toInt().coerceAtLeast(1)
         val ramMb = (sizeMb * 1.6).toInt()
         val cleanName = if (file.name.endsWith(".gguf", ignoreCase = true)) file.name.dropLast(5) else file.name
+        val isThinking = cleanName.contains("r1", ignoreCase = true) ||
+            cleanName.contains("deepseek", ignoreCase = true) ||
+            cleanName.contains("gemma-4", ignoreCase = true) ||
+            cleanName.contains("qwq", ignoreCase = true) ||
+            cleanName.contains("think", ignoreCase = true)
         return LfmModel(
             id = "custom-${file.absolutePath.hashCode()}-${file.name}",
             label = cleanName,
@@ -221,6 +229,7 @@ object ModelCatalog {
             sizeMb = sizeMb,
             exactBytes = file.length(),
             minRamMb = ramMb,
+            supportsThinking = isThinking,
             description = "Custom GGUF in ${file.parentFile?.name ?: "Download/FireLM"}.",
             isCustom = true,
             customFilePath = file.absolutePath
@@ -231,6 +240,11 @@ object ModelCatalog {
         val sizeMb = (sizeBytes / (1024 * 1024)).toInt().coerceAtLeast(1)
         val ramMb = (sizeMb * 1.6).toInt()
         val cleanName = if (name.endsWith(".gguf", ignoreCase = true)) name.dropLast(5) else name
+        val isThinking = cleanName.contains("r1", ignoreCase = true) ||
+            cleanName.contains("deepseek", ignoreCase = true) ||
+            cleanName.contains("gemma-4", ignoreCase = true) ||
+            cleanName.contains("qwq", ignoreCase = true) ||
+            cleanName.contains("think", ignoreCase = true)
         return LfmModel(
             id = "saf-${name.hashCode()}-$name",
             label = cleanName.take(28),
@@ -238,6 +252,7 @@ object ModelCatalog {
             sizeMb = sizeMb,
             exactBytes = sizeBytes,
             minRamMb = ramMb,
+            supportsThinking = isThinking,
             description = "Custom GGUF synced from Models folder.",
             isCustom = true,
             customUriString = uri.toString()
